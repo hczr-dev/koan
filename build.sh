@@ -152,9 +152,11 @@ trap ran EXIT
 # own name (Store.name). The executable is yab in both.
 NAME="yab"
 if [ "$STEP" = "app" ]; then
-  DISPLAY_NAME="yab Dev"
-  USER_DISPLAY_NAME="Yab Dev"
-  BUNDLE_ID="dev.serafim.fast.dev"
+  # A fork's own name (scripts/custom/build-dev.sh: Koan).
+  DISPLAY_NAME="${YAB_BRAND_NAME:-yab Dev}"
+  USER_DISPLAY_NAME="${YAB_BRAND_NAME:-Yab Dev}"
+  # A custom build signed by its own team names its own id (scripts/custom).
+  BUNDLE_ID="${YAB_DEV_BUNDLE_ID:-dev.serafim.fast.dev}"
   if [ "${YAB_LAUNCH_PREVIEW:-}" = 1 ]; then
     BUNDLE_ID="dev.serafim.fast.launcharrival.dev"
   fi
@@ -475,7 +477,7 @@ fi
 cp "$ICON_CACHE/Assets.car" "$ICON_CACHE/yab.icns" "$APP/Contents/Resources/"
 cp -R "$ICON_CACHE/AppIcons" "$APP/Contents/Resources/"
 # The mark, the picture Welcome draws (Logomark, Design.swift).
-cp Icon/Mark.png "$APP/Contents/Resources/Mark.png"
+cp "${YAB_BRAND_MARK:-Icon/Mark.png}" "$APP/Contents/Resources/Mark.png"
 # Yab for iPhone's icon, for the rows that offer it (PhoneBeta.swift).
 cp Icon/iPhone.png "$APP/Contents/Resources/iPhone.png"
 # The notices the licenses of code inside the app ask to travel with it.
@@ -620,6 +622,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
       <key>CFBundleURLName</key><string>Shared Yab Boost</string>
       <key>CFBundleURLSchemes</key><array><string>yab-boost</string></array>
     </dict>
+    <!-- Focus, from an app blocker or a script: yab-focus://lock?minutes=50 (FocusMode.swift). -->
+    <dict>
+      <key>CFBundleURLName</key><string>Focus</string>
+      <key>CFBundleURLSchemes</key><array><string>yab-focus</string></array>
+    </dict>
   </array>
   <key>CFBundleDocumentTypes</key>
   <array>
@@ -697,6 +704,10 @@ enum Links {
     static func take(_ url: URL) {}
     @MainActor static func requestNewTab() {}
 }
+enum FocusControl {
+    @MainActor static func run(_ command: String) -> Bool { true }
+    @MainActor static func filter(on: Bool, lock: Bool) {}
+}
 SWIFT
 printf '%s\n' '["AppIntent","AppEntity"]' > "$INTENTS/protocols.json"
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
@@ -749,6 +760,13 @@ fi
 if [ -n "${YAB_DEBUG:-}" ]; then
   /usr/libexec/PlistBuddy -c "Delete :YabDebug" "$APP/Contents/Info.plist" 2>/dev/null || true
   /usr/libexec/PlistBuddy -c "Add :YabDebug string $YAB_DEBUG" "$APP/Contents/Info.plist"
+fi
+
+# Smart Downloads' engine inside the app: this Mac's aria2, with the
+# libraries it loads, signed ad hoc on its own before the app is sealed
+# (scripts/custom/bundle-aria2.sh). Nothing on a Mac without aria2.
+if [ "${YAB_ARIA2:-1}" = 1 ]; then
+  bash scripts/custom/bundle-aria2.sh "$APP" || echo "aria2: not bundled" >&2
 fi
 
 # Signing. A Developer ID certificate, when there is one, with the hardened

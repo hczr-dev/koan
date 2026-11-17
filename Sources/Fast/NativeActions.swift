@@ -232,6 +232,11 @@ struct NativeSetting {
         choice("tab-icons", "Tab icons", \.glyph, values: Glyph.allCases.map(\.rawValue)),
         choice("density", "Density", \.density, values: Density.allCases.map(\.rawValue)),
         boolean("address-bar", "Address bar", \.addressBar),
+        boolean("address-bar-folds", "Auto-hide address bar", \.barFolds),
+        boolean("sleep", "Put idle tabs to sleep", \.sleepsTabs),
+        boolean("downloads-sort", "Sort downloads into folders", \.sortsDownloads),
+        boolean("downloads-smart", "Download with Smart Downloads", \.smartDownloads),
+        boolean("media-solo", "Pause other tabs when one plays", \.pausesOtherMedia),
         boolean("full-url", "Show full URL", \.fullURL),
         boolean("peek-address", "Show address bar in Peek", \.peekAddress),
         choice("bookmarks-bar", "Bookmarks bar", \.bookmarkBar, values: BookmarkBarMode.allCases.map(\.rawValue)),
@@ -292,6 +297,8 @@ enum NativeActions {
                                  "mail-people", "sync-passwords", "activity", "crashes",
                                  // Profile selection changes access to signed-in accounts; the person confirms it.
                                  "space-sign-ins",
+                                 // Your debrid account and your Focus list are yours to change.
+                                 "debrid", "debrid-key", "focus", "focus-sites",
                                  // The person's consent for mail going to their AI (MailConsent): theirs alone.
                                  "mail-ahead", "mail-summaries", "mail-agents-others",
                                  // AI in Yab (AIUse): the person turns AI on or off, never an agent.

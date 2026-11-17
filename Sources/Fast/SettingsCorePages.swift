@@ -84,6 +84,9 @@ struct GeneralPage: View {
             }
             .settingsAnchor("save-to")
             SettingsSwitch("Ask where to save each file", isOn: $prefs.asksWhereToSave).settingsAnchor("ask-where")
+            SettingsSwitch("Sort downloads into folders", isOn: $prefs.sortsDownloads).settingsAnchor("downloads-sort")
+            SettingsSwitch("Download with Smart Downloads", isOn: $prefs.smartDownloads).settingsAnchor("downloads-smart")
+            SmartDownloadSettings()
             SettingsSwitch("Choose files to upload in Finder", isOn: $prefs.uploadsInFinder).settingsAnchor("upload-finder")
         }
         GeneralSteps(browser: browser, bringing: bringing, model: model, isDefault: isDefault, makeDefault: makeDefault)
@@ -299,6 +302,10 @@ struct AppearancePage: View {
             MenuRow("Address bar", options: [("Hidden", AddressShow.hidden), ("Site", .site), ("Full URL", .full)],
                     selection: addressShow)
                 .settingsAnchor("address-bar")
+            if prefs.addressBar && prefs.sidebar {
+                SettingsSwitch("Auto-hide address bar", isOn: $prefs.barFolds)
+                    .settingsAnchor("address-bar-folds")
+            }
             SettingsRow("Show address bar in Peek") {
                 Toggle(SettingsWords.text("Show address bar in Peek"), isOn: $prefs.peekAddress)
                     .labelsHidden()
@@ -435,6 +442,12 @@ struct TabsPage: View {
                     .fixedSize()
             }
             .settingsAnchor("tidy")
+            SettingsRow("Put idle tabs to sleep") {
+                DropMenu("Put idle tabs to sleep", options: TabSleep.allCases.map { (title: $0.title, value: $0) },
+                         selection: Binding(get: { TabSleep.current(prefs) }, set: { $0.apply(prefs) }))
+                    .fixedSize()
+            }
+            .settingsAnchor("sleep")
             SettingsRow("Peek links with", detail: "Option-click opens Peek instead of Split View in regular tabs.") {
                 DropMenu("Peek links with", options: [(title: SettingsWords.text("Shift-click"), value: PeekClick.shift.rawValue),
                                                      (title: SettingsWords.text("Option-click"), value: PeekClick.option.rawValue)],
@@ -476,6 +489,7 @@ struct TabsPage: View {
             .settingsAnchor("energy-saver")
         }
         AwakeSiteSettings()
+        FocusSettings()
         Section {
             SettingsRow("⌘-clicking links makes folders", detail: "Group a page and its opened links. The folder is removed when one tab remains.") {
                 Toggle(SettingsWords.text("⌘-clicking links makes folders"), isOn: $prefs.linkFolders)
@@ -529,6 +543,7 @@ struct TabsPage: View {
                     .controlSize(.small)
             }
             .settingsAnchor("player")
+            SettingsSwitch("Pause other tabs when one plays", isOn: $prefs.pausesOtherMedia).settingsAnchor("media-solo")
             SettingsRow("Your next meeting", detail: meetingKey.keys.map { "Show a meeting countdown on pinned calendars. Join from any app with \($0.settingsHint)." } ?? "Show a meeting countdown and Join button on pinned calendars.") {
                 Toggle("Your next meeting", isOn: Binding(
                     get: { meetings.wanted },

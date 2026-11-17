@@ -27,6 +27,20 @@ final class StripPeek: ObservableObject {
     @Published var card = false
 }
 
+/// The folded address bar out over the page's top (Browser.barFolded,
+/// Brim.bringBar, GroundBar). Its own object, as the strip's is, so the
+/// edge bringing it out draws the bar alone, not the whole window.
+@MainActor
+final class BarPeek: ObservableObject {
+    @Published var out = false
+    /// The page carried down under it (BarSunk), once Core Animation has
+    /// carried it there (Browser.moveBar).
+    @Published var sunk = false
+    /// How far down that is, as the window last worked it out. Not
+    /// published; nothing draws from it.
+    var sink: CGFloat = 0
+}
+
 /// The band with the lights over the page, beside a column on the right
 /// (HeadBand, Browser.headOut and headShown). Its own object for the same
 /// reason as the strip's and the column's: as the browser's, the band coming
@@ -845,9 +859,9 @@ final class ColumnView: NSView {
 /// Out on a curve that barely slows, in 0.11 s to just out of sight as
 /// Dia's goes, 0.12 s for the further this one goes past it, half way in 49.
 enum CardMotion {
-    static let response: CFTimeInterval = 0.21
+    static let response: CFTimeInterval = 0.16
     static let damping: CGFloat = 0.78
-    static let leavingTime: CFTimeInterval = 0.12
+    static let leavingTime: CFTimeInterval = 0.09
     /// Past the card, just out of sight: its shadow shows 16 points past it.
     static let shadow: CGFloat = 20
     static let leavingPoints: (Float, Float, Float, Float) = (0.67, 0.85, 0.73, 0.86)

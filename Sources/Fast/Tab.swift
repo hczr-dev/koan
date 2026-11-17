@@ -797,6 +797,11 @@ final class Tab: ObservableObject, Identifiable, Relaying {
     var flagged: Flagged? {
         willSet { relay.send(\.flagged, newValue) }
     }
+    /// A site Focus kept this tab from (FocusMode): a page of its own in
+    /// place of the site, until you go back, on, or turn Focus off.
+    var focusBlocked: FocusBlock? {
+        willSet { relay.send(\.focusBlocked, newValue) }
+    }
     /// How far down the page you are, nought to one, in reading mode only.
     /// The tab's own pill fills with it; any other page leaves it at nought.
     var reading: Double = 0 {
@@ -1276,7 +1281,11 @@ final class Tab: ObservableObject, Identifiable, Relaying {
     @ObservationIgnored var heardAt: Date?
     var noisy = false {
         willSet { relay.send(\.noisy, newValue) }
-        didSet { if noisy != oldValue { onSound?(self) } }
+        didSet {
+            if noisy != oldValue { onSound?(self) }
+            // One tab plays at a time (MediaSolo).
+            if noisy, !oldValue { MediaSolo.started(self) }
+        }
     }
     /// Silenced from the tab's menu. The tab's to keep rather than the
     /// page's: it holds across every page the tab goes to, and across the
@@ -1940,6 +1949,8 @@ final class Tab: ObservableObject, Identifiable, Relaying {
         didSet {
             if pending != oldValue { settleAddressFlags() }
             if pending == nil { unopened = false }
+            // Asleep or awake: the column dims a row holding no page.
+            if (pending == nil) != (oldValue == nil) { objectWillChange.send() }
         }
     }
     /// Brought back from the last session or put down with ⌘W, and not
@@ -3482,6 +3493,12 @@ final class Tab: ObservableObject, Identifiable, Relaying {
     @ObservationIgnored var httpNavigation = HTTPNavigation(input: nil, destination: nil)
 
     func go(to url: URL, fresh: Bool = false) {
+        // A magnet typed or pasted into the field: Smart Downloads takes it,
+        // the page staying where it is.
+        if url.scheme?.lowercased() == "magnet", SmartDownloads.available {
+            SmartDownloads.shared.add(magnet: url, show: delegate as? Browser ?? BrowserWindows.shared.activeBrowser)
+            return
+        }
         if videoOpening.going(to: url) { built?.endVideoOpening() }
         // A page chosen by hand takes over a pending Instant Link.
         if instantState == .searching { instantTask?.cancel(); instantTask = nil; instantState = nil }

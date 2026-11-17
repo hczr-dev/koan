@@ -340,6 +340,11 @@ final class Links: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             Startup.mark("launched")
             Watchdog.start()
+            // Focus hears other apps from the start, an app blocker's lock
+            // included, whatever window comes first (FocusMode).
+            _ = FocusMode.shared
+            // Apple Passwords, and only it, once Apple lets this Yab reach it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { ApplePasswordsFirst.start() }
             // Fields of many lines scroll their words under a wheel and
             // two fingers (FieldWheel, #129).
             FieldWheel.start()
@@ -424,6 +429,11 @@ final class Links: NSObject, NSApplicationDelegate {
                     catch { browser.announce(error.localizedDescription, mark: "exclamationmark.triangle") }
                 }
             }
+            return
+        }
+        // Focus from another app, an app blocker or a script (FocusMode.perform).
+        if url.scheme?.lowercased() == "yab-focus" {
+            MainActor.assumeIsolated { _ = FocusMode.shared.perform(url, from: "Another app") }
             return
         }
         // A mail link from another app, Yab the Mac's mail app (MailtoPeek.swift).

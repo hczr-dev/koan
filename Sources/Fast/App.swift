@@ -197,6 +197,18 @@ private struct ViewItems: View {
                 get: { selected.prefs.fullURL }, set: { selected.prefs.fullURL = $0 }
             ))
             .disabled(!selected.prefs.addressBar)
+            // The bar folded away until the pointer is at the page's top
+            // (GroundBar): with the tabs down the side only.
+            Toggle("Auto-Hide Address Bar", isOn: Binding(
+                get: { selected.prefs.barFolds }, set: { selected.prefs.barFolds = $0 }
+            ))
+            .disabled(!selected.prefs.addressBar || !selected.prefs.sidebar)
+            // Sites on the Focus list kept away while it is on (FocusMode).
+            Toggle("Focus", isOn: Binding(
+                get: { FocusMode.shared.on }, set: { if $0 { FocusMode.shared.turnOn() } else { FocusMode.shared.turnOff() } }
+            ))
+            // Locked, it stays on until its time is up (FocusMode.lock).
+            Menu("Lock Focus") { FocusLockMenu() }
             BookmarksBarMenu(browser: selected)
         }
         Menu("Split") {
@@ -619,6 +631,23 @@ private struct HeadSunk: ViewModifier {
 
     func body(content: Content) -> some View {
         let reach = band ? ContentView.headSink(out: true, laid: laid, shelf: shelf) : 0
+        let sink = peek.sunk ? reach : 0
+        content
+            .offset(y: sink)
+            .transaction(value: sink) { $0.animation = nil }
+            .onChange(of: reach, initial: true) { peek.sink = reach }
+    }
+}
+
+/// The page carried down under the folded address bar while it is out
+/// (GroundBar, Browser.moveBar), as under the band beside a column on the
+/// right (HeadSunk): slid there by Core Animation, then offset there,
+/// never laid out again, so nothing on the page moves.
+private struct BarSunk: ViewModifier {
+    @ObservedObject var peek: BarPeek
+    let reach: CGFloat
+
+    func body(content: Content) -> some View {
         let sink = peek.sunk ? reach : 0
         content
             .offset(y: sink)
@@ -1206,6 +1235,9 @@ struct ContentView: View {
                 // the page moves. Never stepped by SwiftUI: slid there by
                 // Core Animation, then laid out (HeadSunk).
                 .modifier(HeadSunk(peek: browser.headPeek, band: sidebar && browser.headBand, laid: laid, shelf: shelfRoom))
+                // And under the folded address bar while it is out, the
+                // same way (GroundBar, Browser.moveBar).
+                .modifier(BarSunk(peek: browser.barPeek, reach: browser.barFolded ? barSink : 0))
 
                 // On the right, the same room after the page.
                 if sidebar && browser.flank == .right {
@@ -1219,6 +1251,11 @@ struct ContentView: View {
             // (see `Reshape`): made another size on every frame, WebKit laid
             // the whole page out again each time.
             .transaction { if browser.folding { $0.animation = nil } } }
+
+            // The address bar on the window's ground, the column's color,
+            // beside it, the page a card under it; folded away, out over
+            // the page's top while the pointer is there (GroundBar, Brim).
+            leaf { groundBar }
 
             // With the column on the right in a window, the lights and the
             // site's name in the room the page makes above itself while the
@@ -1307,7 +1344,8 @@ struct ContentView: View {
         // in here, not by the window: its band takes the half it will have.
         Sided(preview: browser.splitPreview, laid: placed, alone: front && browser.stagePair == nil) { side, warm in
         let split = side != .whole
-        let showBar = split || browser.barShown
+        // On the window's ground instead, beside the column (GroundBar).
+        let showBar = split || (browser.barShown && !browser.barOnGround)
         VStack(spacing: 0) {
             // The address, when asked for: the card's own top edge, the page
             // under it. Built ahead, out of sight, while a tab is carried
@@ -1644,7 +1682,13 @@ struct ContentView: View {
     /// from the window's middle.
     private func fieldRoom(in width: CGFloat) -> (CGFloat, CGFloat) {
         guard browser.splitShown, let id = browser.activeID, let half = browser.splitBook.frames[id], width > 0 else {
-            return (0, 0)
+            // Beside a docked column, the middle of the page rather than
+            // the window's, so ⌘T on an empty window stands over the page
+            // it opens (#829). Where the page is too narrow for it, the
+            // window's middle, as before.
+            let side = browser.sideShown
+            guard side > 0, width - side >= Metrics.fieldWidth + 32 else { return (0, 0) }
+            return browser.flank == .left ? (side, 0) : (0, side)
         }
         let need = Metrics.fieldWidth + 32
         guard half.width < need else { return (half.minX, max(0, width - half.maxX)) }
@@ -1942,7 +1986,7 @@ struct ContentView: View {
     /// How tall that room is when there is one: level with the lights
     /// beside the column where they stand, a plain row anywhere else.
     private var shelfHeight: CGFloat {
-        sidebar && !shut && browser.flank == .left ? BookmarkBar.besideLights : BookmarkBar.height
+        sidebar && !shut && browser.flank == .left && groundBand == 0 ? BookmarkBar.besideLights : BookmarkBar.height
     }
 
     /// The row is up, as a number for `ShelfCarry`.
@@ -1989,7 +2033,7 @@ struct ContentView: View {
 
     /// The address bar's height, or nothing while there is none.
     private var barHeight: CGFloat {
-        browser.barShown ? AddressBar.height(sidebar: browser.prefs.sidebar, carded: laid) : 0
+        browser.barShown && !browser.barOnGround ? AddressBar.height(sidebar: browser.prefs.sidebar, carded: laid) : 0
     }
 
     /// The column has its own corner for the lights, so the page beside it
@@ -1999,7 +2043,51 @@ struct ContentView: View {
     /// strip needs a band, and not once it is put away, which leaves as
     /// little behind as the column does.
     private var band: CGFloat {
-        Self.bandHeight(sidebar: sidebar, stripAway: browser.stripAway)
+        Self.bandHeight(sidebar: sidebar, stripAway: browser.stripAway) + groundBand
+    }
+
+    /// The address bar's own height on the window's ground (GroundBar).
+    private var groundBarHeight: CGFloat { AddressBar.height(sidebar: true, carded: laid) }
+
+    /// The room the address bar takes on the window's ground, over the
+    /// page: the bar, with the card's inset above it and under it, so the
+    /// page's card starts level with the column's top band. None while it
+    /// is folded away: it comes out over the page then (Brim).
+    private var groundBand: CGFloat {
+        browser.barOnGround && !browser.barFolded ? groundBarHeight + (laid ? 2 * Backdrop.inset : 0) : 0
+    }
+
+    /// How far the page goes down under the folded bar while it is out:
+    /// to where it starts with the bar in its place, the card's top level
+    /// with the column's top band.
+    private var barSink: CGFloat {
+        max(0, groundBarHeight + (laid ? 2 * Backdrop.inset : 0) - margins.top)
+    }
+
+    /// The address bar on the window's ground beside the column, in the
+    /// column's ink on the same backdrop (Browser.barOnGround).
+    @ViewBuilder
+    private var groundBar: some View {
+        if browser.barOnGround, let tab = browser.active {
+            Group {
+                if carded {
+                    Worn(browser: browser, mode: browser.prefs.backdrop, swatch: backdropTone, glassActive: glassActive) { tone in
+                        groundBarRow(tab, tone: tone)
+                    }
+                } else {
+                    groundBarRow(tab, tone: nil)
+                }
+            }
+            .padding(.leading, browser.sideShown + margins.leading) // design: the page card's own edges, beside the column, so the bar runs level with the card under it
+            .padding(.trailing, margins.trailing) // design: the page card's own edges
+            .transition(.opacity)
+        }
+    }
+
+    private func groundBarRow(_ tab: Tab, tone: Tone?) -> some View {
+        GroundBar(browser: browser, tab: tab, peek: browser.barPeek, folded: browser.barFolded,
+                  height: groundBarHeight, top: laid ? Backdrop.inset : 0,
+                  leadingInset: margins.leading, tone: tone)
     }
 
     static func bandHeight(sidebar: Bool, stripAway: Bool) -> CGFloat {
@@ -3064,6 +3152,7 @@ struct ContentView: View {
         case .float: browser.toggleFloat()
         case .fillForm: return browser.fillFormHere()
         case .hide: browser.toggleHiding()
+        case .highlight: if let web = browser.active?.builtPage?.webKit { Highlights.shared.highlight(in: web) }
         case .zoomIn: browser.zoom(by: 1.1)
         case .zoomOut: browser.zoom(by: 1 / 1.1)
         case .actualSize: browser.resetZoom()

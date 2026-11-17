@@ -691,8 +691,8 @@ enum EdgeReach {
     }
 
     /// A pass through the edge brings nothing; a rest does, from either side.
-    static let edgeRest: CFTimeInterval = 0.3
-    static let cornerRest: CFTimeInterval = 0.35
+    static let edgeRest: CFTimeInterval = 0.15
+    static let cornerRest: CFTimeInterval = 0.2
 
     /// The rest's deadline, read with the same clock as the pointer's look.
     /// Leaving the target forgets it; a different target starts its own rest.
@@ -918,6 +918,11 @@ final class Brim {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _, _, _, _ in AppKitMainThread.sync { self?.rewatch(); self?.light() } }
             .store(in: &keeping)
+        // The address bar folded away is watched for too (GroundBar).
+        browser.prefs.changes(\.barFolds).combineLatest(browser.prefs.changes(\.addressBar))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _, _ in AppKitMainThread.sync { self?.rewatch() } }
+            .store(in: &keeping)
         // Menus are heard as they open and close, on the spot: while one is
         // open the main queue is the menu's.
         center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { [weak self] _ in
@@ -986,10 +991,14 @@ final class Brim {
             browser.quietly { browser.stripPeek = false }
         }
         guard !browser.fullScreen else { return }
-        if browser.prefs.sidebar && (browser.prefs.sideShut || browser.prefs.sideFlank == .right) || browser.stripAway {
+        if browser.prefs.sidebar && (browser.prefs.sideShut || browser.prefs.sideFlank == .right) || browser.stripAway
+            || Self.watchesBar(browser) {
             watch()
         } else {
             stopWatching()
+            if browser.barPeek.out || browser.barPeek.sunk {
+                browser.quietly { browser.barPeek.out = false; browser.barPeek.sunk = false }
+            }
             if browser.headOut || browser.headShown { browser.moveHead(out: false) }
             if browser.sidePeek { browser.sidePeek = false }
         }
@@ -1133,7 +1142,7 @@ final class Brim {
         guard let window, let browser, browser.active?.immersed != true,
               window.isKeyWindow || window.isMainWindow || Brim.benchFront else { cancelRest(); return }
         let full = browser.fullScreen
-        guard full || (browser.prefs.sidebar && browser.prefs.sideShut) || browser.headBand || browser.stripAway else { cancelRest(); return }
+        guard full || (browser.prefs.sidebar && browser.prefs.sideShut) || browser.headBand || browser.stripAway || browser.barFolded else { cancelRest(); return }
         let pointer = Brim.benchPointer ?? NSEvent.mouseLocation
         let frame = window.frame
         let fromTop = frame.maxY - pointer.y
@@ -1184,6 +1193,19 @@ final class Brim {
             seamSince = nil
             bandLeft = nil
             browser.moveHead(out: false)
+        }
+
+        // The address bar folded away (GroundBar) comes down over the page
+        // once the pointer has rested a moment at the page's top, in the
+        // air over its card or on its top edge, and goes back up a little
+        // after the pointer has left it, unless a button is held or a menu
+        // is open.
+        if browser.barFolded {
+            foldedBar(browser, x: pointer.x - frame.minX, fromTop: fromTop, width: frame.width, held: held)
+        } else if browser.barPeek.out {
+            barSince = nil
+            barLeft = nil
+            Self.bringBar(browser, out: false)
         }
 
         // The vertical card clears the system menu. Horizontal tabs live
@@ -1438,6 +1460,62 @@ final class Brim {
     /// And the column.
     static func benchColumnHeld(in window: NSWindow, _ browser: Browser) -> String {
         kept[ObjectIdentifier(window)]?.columnHolder(browser) ?? ""
+    }
+
+    /// The address bar folded away can come out: the pointer is worth
+    /// watching for it outside full screen too.
+    static func watchesBar(_ browser: Browser) -> Bool {
+        browser.prefs.barFolds && browser.prefs.addressBar && browser.prefs.sidebar && browser.prefs.sideFlank == .left
+    }
+
+    /// When the pointer came to rest at the page's top, and when it left
+    /// the folded address bar out over the page (GroundBar).
+    private var barSince: CFTimeInterval?
+    private var barLeft: CFTimeInterval?
+    /// How long the pointer rests at the page's top before the bar comes:
+    /// a hand on its way to the menu bar goes through quicker than that.
+    private static let barRest: CFTimeInterval = 0.08
+
+    private func foldedBar(_ browser: Browser, x: CGFloat, fromTop: CGFloat, width: CGFloat, held: Bool) {
+        let now = CACurrentMediaTime()
+        let start = browser.sideShown
+        if !browser.barPeek.out {
+            barLeft = nil
+            let overPage = x > start && x <= width
+            if !held, !menuOpen, overPage, fromTop >= 0, fromTop <= Backdrop.inset + Metrics.edgeWall {
+                let since = barSince ?? now
+                barSince = since
+                if now - since >= Self.barRest {
+                    barSince = nil
+                    Self.bringBar(browser, out: true)
+                }
+            } else {
+                barSince = nil
+            }
+        } else {
+            barSince = nil
+            let across = x > start - 20 && x <= width + 20
+            let reach = Backdrop.inset + AddressBar.height(sidebar: true, carded: true) + 10
+            let inBar = across && fromTop >= 0 && fromTop <= reach
+            let above = across && fromTop < 0 && fromTop > -Self.bandAbove
+            if held || menuOpen || inBar || above {
+                barLeft = nil
+            } else {
+                let since = barLeft ?? now
+                barLeft = since
+                if now - since >= Self.bandGrace {
+                    barLeft = nil
+                    Self.bringBar(browser, out: false)
+                }
+            }
+        }
+    }
+
+    /// The folded address bar brought down over the page, or let go back
+    /// up, on the card's curves (CardMotion); under Reduce Motion it is
+    /// there, and then it is not.
+    static func bringBar(_ browser: Browser, out: Bool) {
+        browser.moveBar(out: out)
     }
 
     /// The strip put away brought out over the page, or let go back up past

@@ -73,8 +73,11 @@ extension Browser {
     /// the measurements.
     static var sleepAfter: TimeInterval { sleepAfter(set: Store.settings.double(forKey: "sleep.after"), thrift: Thrift.on) }
 
-    static let usualSleepAfter: TimeInterval = 4 * 3600
-    static let thriftSleepAfter: TimeInterval = 3600
+    /// Half an hour unseen (Settings › Tabs › Put idle tabs to sleep), a
+    /// quarter while saving power: a page asleep spends no memory at all,
+    /// and comes back where it was when you go to it.
+    static let usualSleepAfter: TimeInterval = 30 * 60
+    static let thriftSleepAfter: TimeInterval = 15 * 60
 
     static func sleepAfter(set: TimeInterval, thrift: Bool) -> TimeInterval {
         let usual = set > 0 ? set : usualSleepAfter
@@ -125,7 +128,7 @@ extension Browser {
     static let chosen: Set<String> = ["pinned", "kept", "a site kept awake"]
 
     /// How many of the tabs you were last on stay awake (`recentlyUsed`).
-    static let keepRecent = 5
+    static let keepRecent = 3
 
     /// The tab on screen was another: the one left is the one most recently
     /// used. A short list, a few more than are kept, so a closed tab in it
@@ -563,5 +566,42 @@ enum Power {
             return (onBattery, left * 100 / full)
         }
         return (onBattery, nil)
+    }
+}
+
+
+/// Settings › Tabs › Put idle tabs to sleep: never, or after so long unseen
+/// (`tabs.sleep` and `sleep.after`, Browser.sleepAfter).
+enum TabSleep: Double, CaseIterable, Hashable {
+    case never = 0
+    case quarter = 900
+    case half = 1800
+    case hour = 3600
+    case four = 14400
+
+    var title: String {
+        switch self {
+        case .never: "Never"
+        case .quarter: "After 15 minutes"
+        case .half: "After 30 minutes"
+        case .hour: "After 1 hour"
+        case .four: "After 4 hours"
+        }
+    }
+
+    @MainActor static func current(_ prefs: Preferences) -> TabSleep {
+        guard prefs.sleepsTabs else { return .never }
+        let set = Store.settings.double(forKey: "sleep.after")
+        let after = set > 0 ? set : Browser.usualSleepAfter
+        return allCases.first { $0.rawValue == after } ?? .half
+    }
+
+    @MainActor func apply(_ prefs: Preferences) {
+        guard self != .never else {
+            prefs.sleepsTabs = false
+            return
+        }
+        Store.settings.set(rawValue, forKey: "sleep.after")
+        prefs.sleepsTabs = true
     }
 }

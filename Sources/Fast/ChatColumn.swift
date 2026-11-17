@@ -338,6 +338,12 @@ extension Browser {
                 owner.closePanel(id, in: self, tabID: tabID, contextID: contextID)
             }
             ChromiumSidePanel.shared.closePanel(contextID: contextID)
+            // A web panel's page is kept for next time; the column is the
+            // chat's again.
+            if self.panelExtension == WebPanels.marker || self.panelExtension == SmartDownloads.marker {
+                self.panelExtension = nil
+                self.panelContextID = nil
+            }
         }
     }
 
@@ -531,6 +537,7 @@ private struct ChatColumnRoot: View {
     let feed: ChatFeed
     @ObservedObject private var here = ExtensionsHere.shared
     @ObservedObject private var chromiumPanels = ChromiumSidePanel.shared
+    @ObservedObject private var webPanels = WebPanels.shared
 
     var body: some View {
         ZStack {
@@ -544,6 +551,17 @@ private struct ChatColumnRoot: View {
                 ExtensionSidePanelColumn(browser: browser, page: page, corner: look.corner, width: look.width)
                     .opacity(browser.panelExtension == page.id && browser.panelContextID == page.contextID ? 1 : 0)
                     .allowsHitTesting(browser.panelExtension == page.id && browser.panelContextID == page.contextID)
+            }
+            // Smart Downloads' list (SmartDownloads).
+            SmartDownloadsColumn(browser: browser, width: look.width)
+                .opacity(browser.panelExtension == SmartDownloads.marker ? 1 : 0)
+                .allowsHitTesting(browser.panelExtension == SmartDownloads.marker)
+            // The sites kept as panels (WebPanels): each one's page kept
+            // here once opened, the one asked for in front.
+            ForEach(webPanels.pages(in: browser)) { page in
+                WebPanelColumn(browser: browser, page: page, width: look.width)
+                    .opacity(browser.panelExtension == WebPanels.marker && browser.panelContextID == page.panel.uuidString ? 1 : 0)
+                    .allowsHitTesting(browser.panelExtension == WebPanels.marker && browser.panelContextID == page.panel.uuidString)
             }
             if #available(macOS 15.4, *) {
                 ForEach(chromiumPanels.panels(in: browser)) { panel in

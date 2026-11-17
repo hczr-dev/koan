@@ -486,6 +486,29 @@ final class Preferences: ObservableObject, Relaying {
         willSet { relay.send(\.addressBar, newValue) }
         didSet { store.set(addressBar, forKey: "addressbar") }
     }
+    /// The address bar folded away until the pointer comes to the top of
+    /// the page, where it comes down over it, as Zen's compact mode has it
+    /// (Browser.barFolded, Brim, GroundBar). Only for the address bar on
+    /// the window's ground, beside the column.
+    var barFolds: Bool {
+        willSet { relay.send(\.barFolds, newValue) }
+        didSet { store.set(barFolds, forKey: "addressbar.folds") }
+    }
+    /// Downloads put into folders by what they are (DownloadSorting).
+    /// Big downloads go through Smart Downloads (SmartDownloads.takes).
+    var smartDownloads: Bool {
+        willSet { relay.send(\.smartDownloads, newValue) }
+        didSet { store.set(smartDownloads, forKey: SmartDownloads.defaultKey) }
+    }
+    var sortsDownloads: Bool {
+        willSet { relay.send(\.sortsDownloads, newValue) }
+        didSet { store.set(sortsDownloads, forKey: DownloadSorting.key) }
+    }
+    /// A tab starting to play pauses the others (MediaSolo).
+    var pausesOtherMedia: Bool {
+        willSet { relay.send(\.pausesOtherMedia, newValue) }
+        didSet { store.set(pausesOtherMedia, forKey: MediaSolo.key) }
+    }
     var fullURL: Bool {
         willSet { relay.send(\.fullURL, newValue) }
         didSet { store.set(fullURL, forKey: "addressbar.full-url") }
@@ -508,7 +531,9 @@ final class Preferences: ObservableObject, Relaying {
     /// its toolbar on and off (feedback #309). No setting of its own: an
     /// "addressbar.helm" an earlier build stored is never read. With the
     /// tabs across the top the band has them anyway.
-    var helmInBand: Bool { addressBar && sidebar }
+    /// With the column on the left they stay by the lights over the column,
+    /// as Zen keeps its toolbar's, the bar over the page holding the address.
+    var helmInBand: Bool { addressBar && sidebar && sideFlank == .right }
     var pageZoom: Double {
         willSet { relay.send(\.pageZoom, newValue) }
         didSet {
@@ -1133,6 +1158,10 @@ final class Preferences: ObservableObject, Relaying {
         compactField = store.bool(forKey: "field.compact")
         sideFlank = store.string(forKey: "sidebar.flank").flatMap(Flank.init) ?? .left
         addressBar = store.bool(forKey: "addressbar")
+        barFolds = store.bool(forKey: "addressbar.folds")
+        sortsDownloads = store.object(forKey: DownloadSorting.key) as? Bool ?? !Store.unitTests
+        smartDownloads = store.object(forKey: SmartDownloads.defaultKey) as? Bool ?? !Store.unitTests
+        pausesOtherMedia = store.object(forKey: MediaSolo.key) as? Bool ?? true
         peekAddress = store.bool(forKey: "peek.address")
         fullURL = store.bool(forKey: "addressbar.full-url")
         pageZoom = PageAppearance.defaultZoom(in: store)
@@ -1163,7 +1192,7 @@ final class Preferences: ObservableObject, Relaying {
         density = Density.saved
         // Off unless turned on: memory running
         // out puts tabs down whatever this says (Sleep.swift).
-        sleepsTabs = store.object(forKey: "tabs.sleep") as? Bool ?? false
+        sleepsTabs = store.object(forKey: "tabs.sleep") as? Bool ?? true
         instantLinks = store.object(forKey: "field.instant") as? Bool ?? true
         tidyAfter = (store.object(forKey: "tabs.tidy") as? Int).flatMap(Tidy.init) ?? .halfDay
         shielded = store.object(forKey: "shield") as? Bool ?? true

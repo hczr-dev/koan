@@ -206,6 +206,8 @@ final class PageView: WKWebView, NSTextContent {
         defer {
             Self.dress(menu)
             splitLinkHere(menu)
+            smartLinkHere(menu)
+            highlightHere(menu)
             Self.menuWatch?(menu)
         }
         if let (user, linked) = onAppleCodeContext?() {
@@ -423,6 +425,40 @@ final class PageView: WKWebView, NSTextContent {
         } else if let tab = contextLinkItem {
             openContextLink(tab)
         }
+    }
+
+    /// A link fetched by Smart Downloads, over many connections, with this
+    /// page's cookies for its site (SmartDownloads).
+    private func smartLinkHere(_ menu: NSMenu) {
+        guard SmartDownloads.available,
+              let tab = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierOpenLinkInNewWindow" }),
+              !menu.items.contains(where: { $0.identifier?.rawValue == "YabSmartDownload" }) else { return }
+        let item = NSMenuItem(title: "Download with Smart Downloads", action: #selector(smartContextLink(_:)), keyEquivalent: "")
+        item.target = self
+        item.identifier = NSUserInterfaceItemIdentifier("YabSmartDownload")
+        MenuMark.put("arrow.down.circle", on: item)
+        let split = menu.items.first { $0.identifier?.rawValue == Self.splitLinkID }
+        menu.insertItem(item, at: menu.index(of: split ?? tab) + 1)
+    }
+
+    @objc private func smartContextLink(_ item: NSMenuItem) {
+        guard let link = contextLink, link.at >= contextMenuStarted, link.source == url, contextMenuSource == url else { return }
+        SmartDownloads.shared.add(link: link.url, referer: url, store: configuration.websiteDataStore)
+    }
+
+    /// Selected words marked, kept and marked again next time (Highlights).
+    private func highlightHere(_ menu: NSMenu) {
+        guard let search = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierSearchWeb" }),
+              !menu.items.contains(where: { $0.identifier?.rawValue == "YabHighlight" }) else { return }
+        let item = NSMenuItem(title: "Highlight", action: #selector(highlightSelection(_:)), keyEquivalent: "")
+        item.target = self
+        item.identifier = NSUserInterfaceItemIdentifier("YabHighlight")
+        MenuMark.put("highlighter", on: item)
+        menu.insertItem(item, at: menu.index(of: search) + 1)
+    }
+
+    @objc private func highlightSelection(_ item: NSMenuItem) {
+        Highlights.shared.highlight(in: self)
     }
 
     func takeMenuOpen(for destination: URL?) -> Bool? {

@@ -645,8 +645,8 @@ extension View {
 // arrives or leaves. Using the same two everywhere is most of why a thing feels
 // like a single piece of software rather than a pile of views.
 public enum Motion {
-    public static let glide = Animation.spring(response: 0.34, dampingFraction: 0.82)
-    public static let settle = Animation.spring(response: 0.30, dampingFraction: 0.86)
+    public static let glide = Animation.spring(response: 0.28, dampingFraction: 0.82)
+    public static let settle = Animation.spring(response: 0.24, dampingFraction: 0.86)
     public static let quick = Animation.easeOut(duration: 0.14)
     /// A mark turning into another where it stands, under the pointer: a
     /// kept tab's minus opening into its cross as the tab is put down
@@ -657,16 +657,16 @@ public enum Motion {
     public static let keptShift = Animation.spring(response: 0.12, dampingFraction: 0.9)
     public static let keptFade = Animation.easeOut(duration: 0.045)
     /// A surface coming in from the edge it lives past, whole and already
-    /// composed, and going back out: in 0.22 s and settling, out quicker and
+    /// composed, and going back out: in 0.16 s and settling, out quicker and
     /// gathering speed, the way it would leave. No give on either, the
     /// column comes and goes dozens of times a day, and a bounce on a path
     /// that well worn stops being a pleasure by the second day.
-    public static let arrive = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.22)
-    public static let depart = Animation.timingCurve(0.4, 0, 0.8, 0.4, duration: 0.15)
+    public static let arrive = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.16)
+    public static let depart = Animation.timingCurve(0.4, 0, 0.8, 0.4, duration: 0.11)
     /// One surface changing size, the floating column taking its place in
     /// the window, or giving it up, and the page making room in the same
     /// beat. Longer than arriving: more of it moves.
-    public static let reshape = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.3)
+    public static let reshape = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.2)
     /// The column's edge let go past its widest, going back to it: Dia's,
     /// read off its frames (evals/side-width/rubber.py), within 2% of each.
     public static let stretchBack = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.25)
@@ -687,8 +687,8 @@ public enum Motion {
     /// exit is, for one that goes. Short and without give: this is the
     /// thing done a hundred times a day, and it should never be in the way.
     public static let room = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: roomTime)
-    static let roomTime: TimeInterval = 0.2
-    public static let leave = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.14)
+    static let roomTime: TimeInterval = 0.15
+    public static let leave = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.11)
     /// A chat's column (ChatColumn): what arrives, height and opacity
     /// together, long at the end so it settles rather than stops; and what
     /// answers a hand, the field opening, a button coming with the words.

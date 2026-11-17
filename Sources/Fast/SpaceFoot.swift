@@ -609,6 +609,10 @@ enum FootPlusMenu {
         // For the site in front, or, with none, for the one the words name:
         // never a dead row (register #447).
         line("New Boost…", "wand.and.stars") { browser.newBoost() }
+        // The page in front kept as a panel beside the page (WebPanels).
+        line("Add Page as Panel", "sidebar.right", enabled: WebPanels.shared.canAdd(from: browser)) {
+            WebPanels.shared.addFront(of: browser)
+        }
         menu.addItem(.separator())
         line("Split View", "yab.split.plus", keys: .split, enabled: tab.map { browser.pair(of: $0.id) == nil } ?? false) {
             browser.splitView()

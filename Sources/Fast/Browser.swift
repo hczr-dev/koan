@@ -2344,6 +2344,22 @@ final class Browser: NSObject, ObservableObject, Relaying {
     /// halves each with its own. Developer Mode's band alone leaves them.
     var bandDoors: Bool { barShown && (splitShown || prefs.addressBar) }
 
+    /// The address bar on the window's ground beside the column, in its
+    /// ink on the same backdrop, the page a card under it (GroundBar),
+    /// rather than the top edge of the page's own card. One page on
+    /// screen, the column on the left: two halves keep a band each, and a
+    /// column on the right has the lights' band over the page (HeadBand).
+    var barOnGround: Bool {
+        prefs.sidebar && prefs.sideFlank == .left && prefs.addressBar && !splitShown && barShown
+    }
+
+    /// That bar folded away, out over the page while the pointer is at its
+    /// top (Brim, barPeek). Not in full screen, where it stays.
+    var barFolded: Bool { barOnGround && prefs.barFolds && !fullScreen }
+
+    /// The folded bar out over the page: watched by the bar alone.
+    let barPeek = BarPeek()
+
     // MARK: - the bookmarks bar
 
     /// The bookmarks belong to the window, including while the field asks
@@ -9421,6 +9437,15 @@ extension Browser: PageDownloadEvents {
             self.download(download, didFailWithError: error, resumeData: nil)
             return
         }
+        // A big file is Smart Downloads': the engine's own is let go, with
+        // no row and no failure, and aria2's takes its place (SmartDownloads.takes).
+        if SmartDownloads.shared.takes(download, response: response, name: downloadNames[id] ?? suggestedFilename,
+                                       in: self, tab: download.page.flatMap { tab(owning: $0) }) {
+            hoard.handedOff(download)
+            self.download(download, didFailWithError: URLError(.cancelled), resumeData: nil)
+            download.cancelDownload { _ in }
+            return
+        }
         captureDownloadFolder(download)
         let asked = downloadNames.removeValue(forKey: id)
             ?? response.url.flatMap { namedDownloads.removeValue(forKey: $0) }
@@ -9610,7 +9635,10 @@ extension Browser: PageDownloadEvents {
             self.download(download, didFailWithError: error, resumeData: nil)
             return
         }
-        let url = DownloadDestinations.reserve(name, in: destinationFolder, for: download.downloadID)
+        // Put away by what it is (DownloadSorting), unless an extension
+        // asked for a folder of its own.
+        let sortedFolder = download.isExtensionDownload ? destinationFolder : DownloadSorting.place(name, in: destinationFolder)
+        let url = DownloadDestinations.reserve(name, in: sortedFolder, for: download.downloadID)
         if !download.isExtensionDownload {
             tidyDownloadFiles.insert(ObjectIdentifier(download))
             DownloadNames.warm(url.lastPathComponent, browser: self)
@@ -9766,6 +9794,10 @@ extension Browser: PageDownloadEvents {
             source: source
         )
         loot.add(keep)
+        // A torrent file, fetched: Smart Downloads starts what it describes.
+        if file.pathExtension.lowercased() == "torrent", SmartDownloads.available {
+            SmartDownloads.shared.add(torrentFile: file, show: self)
+        }
         // Named by what it is, if it came in under a name nobody would give
         // it: only a file of yours that went straight to the Downloads
         // folder, not one you named in the panel or an agent's.
@@ -9995,6 +10027,13 @@ extension Browser: PageEvents {
             tab.flagged = flagged
             return
         }
+        // Focus keeps the sites on its list away while it is on (FocusMode).
+        if action.targetIsMainFrame == true, ["http", "https"].contains(scheme),
+           let tab = tab(owning: page), let site = FocusMode.shared.blocked(url) {
+            decisionHandler(.cancel)
+            tab.focusBlocked = FocusBlock(site: site, url: url)
+            return
+        }
         // A page's own host under an extension's PAC script (ExtensionProxy);
         // nothing without one.
         if action.targetIsMainFrame != false { ExtensionProxy.consider(url) }
@@ -10191,6 +10230,15 @@ extension Browser: PageEvents {
                 return
             }
             decisionHandler(.allow)
+        } else if scheme == "yab-focus" {
+            // Focus answers other apps, never a page: a link here could
+            // lock it or turn it off (FocusMode.perform).
+            decisionHandler(.cancel)
+        } else if scheme == "magnet", SmartDownloads.available,
+                  action.targetIsMainFrame ?? true || action.kind == .linkActivated {
+            // A torrent's magnet: Smart Downloads takes it, not another app.
+            decisionHandler(.cancel)
+            SmartDownloads.shared.add(magnet: url, show: self)
         } else {
             // Another app's link: asked about in the tab's pill first. The
             // page itself may ask, by its address or by a hidden frame of
@@ -10349,6 +10397,7 @@ extension Browser: PageEvents {
         tab.failure = nil
         tab.untrusted = nil
         tab.flagged = nil
+        tab.focusBlocked = nil
         tab.typing = false
         // Whatever you last set this site to, before it draws a single frame
         // at the wrong size.
@@ -10380,6 +10429,8 @@ extension Browser: PageEvents {
     private func finished(_ page: any PageHandle) {
         guard let tab = tab(owning: page), let url = tab.address else { return }
         Startup.mark("page")
+        // Your highlights on it, marked again (Highlights).
+        if let web = page.webKit { Highlights.shared.restore(in: web) }
         if page.engine == .chromium {
             chromiumScriptsFinished(tab)
             tab.releaseNavigation()

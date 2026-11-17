@@ -14,26 +14,26 @@ enum ColumnMotion {
     }
 
     /// Motion.settle: a held row let go, the rows stepping aside.
-    static let settle = Curve.spring(response: 0.30, damping: 0.86)
+    static let settle = Curve.spring(response: 0.24, damping: 0.86)
     /// Motion.keptShift.
     static let keptShift = Curve.spring(response: 0.12, damping: 0.9)
     /// Motion.room: a tab opened, the others making room.
-    static let room = Curve.timing(0.2, 0.8, 0.2, 1, duration: 0.2)
+    static let room = Curve.timing(0.2, 0.8, 0.2, 1, duration: 0.15)
     /// Motion.leave: a tab closed, the others closing up.
-    static let leave = Curve.timing(0.2, 0.8, 0.2, 1, duration: 0.14)
+    static let leave = Curve.timing(0.2, 0.8, 0.2, 1, duration: 0.11)
     /// Motion.quick.
     static let quick = Curve.timing(0, 0, 0.58, 1, duration: 0.14)
     /// Folders.clock: a folder opening, and shutting.
-    static let opening = Curve.timing(0.2, 0.8, 0.2, 1, duration: 0.22)
-    static let shutting = Curve.timing(0, 0, 0.58, 1, duration: 0.14)
+    static let opening = Curve.timing(0.2, 0.8, 0.2, 1, duration: 0.16)
+    static let shutting = Curve.timing(0, 0, 0.58, 1, duration: 0.10)
 
     /// Dia's tab group made by a ⌘-click, and a link joining it: the page's
     /// row drops under the folder's, the link's comes in (filmed frame by
     /// frame, docs/evidence/folder-motion-2026-10-16, section 1).
-    static let linkFolder = Curve.spring(response: 0.17, damping: 0.85)
+    static let linkFolder = Curve.spring(response: 0.14, damping: 0.85)
     /// A tab closed inside such a folder, the rows below closing up (ibid.,
     /// section 2): Dia's ⌘S spring.
-    static let folderClose = Curve.spring(response: 0.205, damping: 0.80)
+    static let folderClose = Curve.spring(response: 0.16, damping: 0.80)
 
     /// What the next laying of the column moves on, said by what changed the
     /// row before the column sees it: a curve; `folder`, a folder a ⌘-click

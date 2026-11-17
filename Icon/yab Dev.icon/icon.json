@@ -2,13 +2,13 @@
   "fill-specializations": [
     {
       "value": {
-        "solid": "extended-srgb:0.00000,0.11373,0.22745,1.00000"
+        "solid": "srgb:0.93333,0.47843,0.64706,1.00000"
       }
     },
     {
       "appearance": "dark",
       "value": {
-        "solid": "extended-srgb:0.00000,0.11373,0.22745,1.00000"
+        "solid": "srgb:0.13725,0.04706,0.09412,1.00000"
       }
     }
   ],
@@ -16,8 +16,30 @@
     {
       "layers": [
         {
-          "name": "Precision Blueprint",
-          "image-name": "blueprint.png",
+          "name": "Bud",
+          "image-name": "bud.svg",
+          "glass": true
+        },
+        {
+          "name": "Petals",
+          "image-name": "petals.svg",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.35
+      }
+    },
+    {
+      "layers": [
+        {
+          "name": "Ground",
+          "image-name": "ground.svg",
           "glass": false
         }
       ],

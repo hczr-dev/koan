@@ -105,6 +105,8 @@ struct SideBar: View {
     /// The agents' row over the foot and its gap (AgentRow), which the rows
     /// go on under as they do under the foot.
     @State private var agentRoom: CGFloat = 0
+    /// The web panels' row over the foot (WebPanelStrip): its room.
+    @State private var panelRoom: CGFloat = 0
     /// The player's island over the foot (BandRoom), which the rows go on
     /// under as they do under the foot.
     @State private var bandRoom: CGFloat = 0
@@ -461,6 +463,7 @@ struct SideBar: View {
                 // The note's room next to the foot's, the rows' scroll view
                 // reaching down through both to the foot's bottom.
                 Color.clear.frame(height: agentRoom)
+                Color.clear.frame(height: panelRoom)
                 UpdateRoom(calls: browser.calls)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { noteRoom = $0 }
                 BandRoom(room: browser.player.room, visible: prefs.showsPlayer, edge: browser.bandEdge)
@@ -494,6 +497,8 @@ struct SideBar: View {
                 // Peek.swift), so its card can stand out over the page.
                 // Here, its room.
                 BandRoom(room: browser.player.room, visible: prefs.showsPlayer, edge: browser.bandEdge)
+                // The sites kept as panels, over the foot (WebPanels).
+                panelStrip
                 if !ColumnKit.cut.contains("foot") {
                     SideFoot(browser: browser, prefs: prefs, hoard: browser.hoard)
                 }
@@ -2016,7 +2021,17 @@ struct SideBar: View {
     /// The foot's room at the scroll view's bottom, and the note's and the
     /// agents' row's over it, which the rows go on under. SwiftUI's rows
     /// stand over the player's room (BandRoom), so they end above it too.
-    private var footRoom: CGFloat { browser.inMail ? 0 : SideBar.footHeight + noteRoom + agentRoom }
+    private var footRoom: CGFloat { browser.inMail ? 0 : SideBar.footHeight + noteRoom + agentRoom + panelRoom }
+
+    /// The web panels' row over the foot, its height kept for the rows'
+    /// room (WebPanelStrip).
+    @ViewBuilder private var panelStrip: some View {
+        if !browser.inMail {
+            WebPanelStrip(browser: browser)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { panelRoom = $0 }
+                .onDisappear { panelRoom = 0 }
+        }
+    }
     /// The AppKit pages are laid over the column's whole height, the
     /// player's island too: their bottom room is everything stacked at the
     /// column's bottom, so their rows end above the foot there as well (#335).
@@ -3785,6 +3800,11 @@ struct SideRow: View {
     /// Kept, and gone on from the page it was kept at (PinnedHome.swift).
     private var away: Bool { !editing && tab.awayFromHome }
 
+    /// Asleep, holding no page (Tab.asleep), and not the one in front:
+    /// its mark grayed and its title let down, so the tabs that are loaded
+    /// read first (#839). Lit again under the pointer.
+    private var dozing: Bool { tab.asleep && !live && !editing && !hovering }
+
     var body: some View {
         let _ = SwitchMeter.countRow()
         let _ = SwitchMeter.note("body \(closes ? "column" : "pager") \(tab.label.prefix(10))\(live ? " live" : "")")
@@ -3835,6 +3855,8 @@ struct SideRow: View {
                 // Six points to the title: with the glyph's own bearing,
                 // the reference has eight visible points after the mark.
                 .padding(.trailing, SideSpeaker.fit.title - SideBar.markGap)
+                .saturation(dozing ? 0 : 1)
+                .opacity(dozing ? 0.5 : 1)
                 // Among tabs that keep everything; a private window's are
                 // all private, said once at its foot.
                 if tab.shy, browser.windowPurpose == .normal, !(glyph == .icons && tab.isBlank) {
@@ -3857,6 +3879,7 @@ struct SideRow: View {
                     .equatable()
                     // Its short name just given: in behind the old one's dust.
                     .modifier(RenameReveal(since: away ? nil : tab.tidiedAt, tint: Rename.tint(tone)))
+                    .opacity(dozing ? 0.6 : 1)
                 // No sharing words or Stop on the column's rows (owner,
                 // 0.46.10): the favicon's red dot and the speaker say a call
                 // is on; the band, the strip and the tag say a share.

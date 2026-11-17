@@ -71,6 +71,10 @@ struct AddressBar: View {
     /// A half's own way out of the pair, a cross at the band's far end:
     /// this half leaves and stays a tab, the other takes the width.
     var leave: (() -> Void)? = nil
+    /// On the window's ground beside the column rather than the top edge
+    /// of the page's card (GroundBar): no fill of its own, the backdrop
+    /// showing through, and no line along its foot.
+    var grounded = false
 
     @Environment(\.tone) private var tone
     @State private var hovering = false
@@ -231,6 +235,7 @@ struct AddressBar: View {
         .contentShape(Rectangle())
         .gesture(carry, including: half ? .all : .subviews)
         .background {
+            if !grounded {
             UnevenRoundedRectangle(
                 topLeadingRadius: corner, bottomLeadingRadius: 0,
                 bottomTrailingRadius: 0, topTrailingRadius: corner,
@@ -253,6 +258,7 @@ struct AddressBar: View {
                         ))
                 }
             }
+            }
         }
         // Native hit testing fills all the air while refusing the measured
         // controls. Split bands retain their existing deck-carry gesture.
@@ -260,8 +266,10 @@ struct AddressBar: View {
         // Where the band ends and the page starts, as faint as the line
         // down the column's edge.
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Palette.ink.opacity(0.06)).frame(height: 1)
-                .allowsHitTesting(false)
+            if !grounded {
+                Rectangle().fill(Palette.ink.opacity(0.06)).frame(height: 1)
+                    .allowsHitTesting(false)
+            }
         }
         // The whole band, including the empty room beside the site, owns
         // its menu. SteadyMenu lets ordinary clicks and window drags through.

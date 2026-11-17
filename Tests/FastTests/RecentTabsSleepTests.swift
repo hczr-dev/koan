@@ -52,10 +52,10 @@ struct RecentTabsSleepTests {
         let used = browser.recentlyUsed()
         #expect(used.count == Browser.keepRecent)
         #expect(used == hidden.reversed().prefix(Browser.keepRecent).map(\.id))
-        // Every one left long ago: only those not among the last five go,
+        // Every one left long ago: only those not among the last few go,
         // the one left longest first.
         let idle = browser.idleTabs(within: Browser.usualSleepAfter, now: AwakeClock.now + Browser.usualSleepAfter + 60).map(\.id)
-        #expect(idle == [hidden[0].id, hidden[1].id])
+        #expect(idle == hidden.prefix(hidden.count - Browser.keepRecent).map(\.id))
     }
 
     @MainActor @Test func memoryOutTakesTheLastFewLast() async throws {

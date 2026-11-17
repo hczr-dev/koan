@@ -26,11 +26,11 @@ enum Reshape {
 
         var duration: CFTimeInterval {
             let base: CFTimeInterval = switch self {
-            case .reshape: 0.3
-            case .arrive: 0.22
-            case .depart: 0.15
-            case .room: 0.2
-            case .unroom: 0.16
+            case .reshape: 0.2
+            case .arrive: 0.16
+            case .depart: 0.11
+            case .room: 0.15
+            case .unroom: 0.12
             case .strip: Motion.stripTime
             }
             return base * Reshape.slow

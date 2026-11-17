@@ -25,14 +25,14 @@ struct SleepTimerTests {
         return (browser, hidden, front, done)
     }
 
-    @MainActor @Test func fourHoursOrOneWhileSavingPower() {
-        #expect(Browser.usualSleepAfter == 4 * 3600)
-        #expect(Browser.sleepAfter(set: 0, thrift: false) == 4 * 3600)
-        #expect(Browser.sleepAfter(set: 0, thrift: true) == 3600)
-        // The bench's own wait, shortened by saving power only past an hour.
+    @MainActor @Test func halfAnHourOrAQuarterWhileSavingPower() {
+        #expect(Browser.usualSleepAfter == 30 * 60)
+        #expect(Browser.sleepAfter(set: 0, thrift: false) == 30 * 60)
+        #expect(Browser.sleepAfter(set: 0, thrift: true) == 15 * 60)
+        // The bench's own wait, shortened by saving power only past a quarter hour.
         #expect(Browser.sleepAfter(set: 60, thrift: false) == 60)
         #expect(Browser.sleepAfter(set: 60, thrift: true) == 60)
-        #expect(Browser.sleepAfter(set: 7200, thrift: true) == 3600)
+        #expect(Browser.sleepAfter(set: 7200, thrift: true) == 15 * 60)
     }
 
     @MainActor @Test func switchingToATabCountsAVisit() async throws {

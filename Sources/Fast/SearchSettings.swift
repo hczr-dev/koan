@@ -24,6 +24,8 @@ struct SearchPage: View {
     var body: some View {
         let _ = tick
         let _ = card.closed
+        // Once a body: each row asked for the list again (its anchor).
+        let sites = shown
         PageHero(page: .search)
         Section {
             FieldLine("Search with", detail: SettingsScope.globalDefault.title, mark: { EmptyView() }, status: { EmptyView() }, end: {
@@ -69,7 +71,7 @@ struct SearchPage: View {
                     .fixedSize()
             })
             .settingsAnchor("site-search-space")
-            ForEach(shown) { scope in
+            ForEach(sites) { scope in
                 SiteRow(scope: scope, on: Scopes.isOn(scope), pointed: card.pointed == scope.id,
                         wanted: wanted == scope.id, typing: $typing, want: { wanted = $0 },
                         step: { step(from: scope.id, by: $0) }) { change in
@@ -83,9 +85,9 @@ struct SearchPage: View {
                 }
                 // A search for the sites comes to the first of them, and
                 // lights it alone, not the whole table.
-                .settingsAnchor(scope.id == shown.first?.id ? "site-search" : "site-" + scope.id)
+                .settingsAnchor(scope.id == sites.first?.id ? "site-search" : "site-" + scope.id)
             }
-            if shown.isEmpty {
+            if sites.isEmpty {
                 Text(filter.trimmingCharacters(in: .whitespaces).isEmpty ? "No sites yet" : "No site called “\(filter)”")
                     .foregroundStyle(.secondary)
             }

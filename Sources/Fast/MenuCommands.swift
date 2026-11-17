@@ -22,7 +22,7 @@ enum MenuCommands {
     /// rest (keys they already have, folder and project chores, developer
     /// odds and ends) waits behind More Commands in the Field.
     static let everyone: Set<Command> = [
-        .sharePage, .back, .forward, .nextTab, .previousTab, .renameTab, .pickAllTabs, .keepTab, .releaseTab,
+        .addWebPanel, .focusOn, .focusOff, .lockFocusShort, .lockFocus, .highlightSelection, .showHighlights, .showSmartDownloads, .sharePage, .back, .forward, .nextTab, .previousTab, .renameTab, .pickAllTabs, .keepTab, .releaseTab,
         .sleepTabs, .muteTab, .unmuteTab, .editPinnedURL, .clearToday, .tidyTabs,
         .moveTabToWindow, .smallWindow, .reopenWindow, .fullScreen, .exitFullScreen, .undoBrowserAction,
         .newSpace, .switchSpace, .moveToSpace, .renameSpace, .deleteSpace,
@@ -306,6 +306,32 @@ enum MenuCommands {
             when: { $0.prefs.addressBar && !$0.prefs.fullURL }) { $0.prefs.fullURL = true }
         add(.showSiteURL, "Show Site Name Only", ["hide full url", "short url"], symbol: "link",
             when: { $0.prefs.addressBar && $0.prefs.fullURL }) { $0.prefs.fullURL = false }
+        add(.addWebPanel, "Add Page as Panel", ["web panel", "add panel", "pin site to sidebar", "side panel"], symbol: "sidebar.right",
+            when: { WebPanels.shared.canAdd(from: $0) }) { WebPanels.shared.addFront(of: $0) }
+        add(.focusOn, "Turn On Focus", ["focus", "focus mode", "block distracting sites", "concentrate"], symbol: "moon",
+            when: { _ in !FocusMode.shared.on }) { _ in FocusMode.shared.turnOn() }
+        add(.focusOff, "Turn Off Focus", ["focus", "focus mode", "unblock sites"], symbol: "moon.fill",
+            when: { _ in FocusMode.shared.on && !FocusMode.shared.locked }) { _ in FocusMode.shared.turnOff() }
+        add(.lockFocusShort, "Lock Focus for 25 Minutes", ["lock focus", "focus lock", "pomodoro", "block sites for 25 minutes"], symbol: "lock",
+            when: { _ in !FocusMode.shared.locked }) { _ in FocusMode.shared.lock(minutes: 25) }
+        add(.lockFocus, "Lock Focus for 1 Hour", ["lock focus", "focus lock", "block sites for an hour", "deep work"], symbol: "lock",
+            when: { _ in !FocusMode.shared.locked }) { _ in FocusMode.shared.lock(minutes: 60) }
+        add(.highlightSelection, "Highlight Selection", ["highlight", "highlighter", "mark text", "annotate"], symbol: "highlighter", key: .highlight,
+            when: { $0.active?.builtPage?.webKit != nil }) { browser in
+                if let web = browser.active?.builtPage?.webKit { Highlights.shared.highlight(in: web) }
+            }
+        add(.showHighlights, "Show Highlights", ["highlights", "my highlights", "saved highlights", "highlighted"], symbol: "highlighter",
+            when: { _ in Highlights.shared.any }) { Highlights.shared.showAll(in: $0) }
+        add(.clearPageHighlights, "Remove Highlights on This Page", ["clear highlights", "remove highlights", "erase highlights"], symbol: "eraser",
+            when: { Highlights.shared.count(for: $0.active?.address) > 0 }) { browser in
+                if let web = browser.active?.builtPage?.webKit { Highlights.shared.clear(in: web) }
+            }
+        add(.showSmartDownloads, "Smart Downloads", ["downloads", "torrent", "magnet", "debrid", "aria2", "download manager", "multi download"],
+            symbol: "arrow.down.circle") { SmartDownloads.shared.toggle(in: $0) }
+        add(.foldBar, "Auto-Hide Address Bar", ["auto hide address bar", "compact mode", "fold address bar", "hide toolbar until pointed at"], symbol: "address.bar",
+            when: { $0.prefs.addressBar && $0.prefs.sidebar && !$0.prefs.barFolds }) { $0.prefs.barFolds = true }
+        add(.unfoldBar, "Always Show Address Bar", ["keep address bar", "unfold address bar", "stop hiding address bar"], symbol: "address.bar",
+            when: { $0.prefs.addressBar && $0.prefs.sidebar && $0.prefs.barFolds }) { $0.prefs.barFolds = false }
         add(.lightTheme, "Switch to Light Mode", ["light mode", "light theme", "toggle light and dark mode"], symbol: "yab.sun", opens: true,
             when: { $0.prefs.look != .light }) { $0.prefs.look = .light }
         add(.darkTheme, "Switch to Dark Mode", ["dark mode", "dark theme", "toggle dark mode", "toggle light and dark mode"], symbol: "moon", opens: true,

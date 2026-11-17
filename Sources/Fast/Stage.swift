@@ -144,6 +144,11 @@ struct Page: View {
                     .transition(.opacity)
             }
 
+            if let block = tab.focusBlocked {
+                FocusBlockedPage(tab: tab, block: block)
+                    .transition(.opacity)
+            }
+
             // A PDF's Fill & Sign: its plate, and the mode over the page
             // once it is pressed (PDFDeskView.swift).
             if tab.failure == nil, tab.untrusted == nil, !tab.floating {

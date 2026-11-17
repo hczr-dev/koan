@@ -558,6 +558,7 @@ enum Shortcut {
         case copyMarkdownLink
         case sharePage
         case back, forward, reload, hardReload, find, findNext, findPrevious, reader, darkPage, float, fillForm
+        case highlight
         case translatePage
         case hide, zoomIn, zoomOut, actualSize, print, inspector, console, inspectElement
         case peekTab, peekSplit, peekClose
@@ -767,6 +768,7 @@ enum Shortcut {
             Item(.float, "Float a video", "floats a video", k("p", [.shift, .command])),
             Item(.fillForm, "Fill the form on this page", "fills the form", Hotkey("↩", .option)),
             Item(.hide, "Hide part of a page", "hides part of a page", k("h", [.shift, .command])),
+            Item(.highlight, "Highlight selected text", "highlights the selected text", k("l", [.shift, .command])),
             Item(.zoomIn, "Zoom in", "zooms in", k("+")),
             Item(.zoomOut, "Zoom out", "zooms out", k("-")),
             Item(.actualSize, "Actual size", "sets the actual size", k("0")),
@@ -1959,7 +1961,9 @@ final class Keymap {
             }
             return nil
         }
-        return NSApp.mainMenu.flatMap(search)
+        // No app in a unit test run: no menu bar to ask.
+        guard let app = NSApp else { return nil }
+        return app.mainMenu.flatMap(search)
     }
 
     /// A menu item whose key is held with fn (the globe), pressed: fn F,

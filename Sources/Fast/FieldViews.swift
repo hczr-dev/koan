@@ -1010,6 +1010,15 @@ private struct EdgeScroll: ViewModifier {
             // compete with the pills'.
             .mask {
                 VStack(spacing: 0) {
+                    // Rows scrolled up under the field fade out before
+                    // they reach its words, so what is typed never sits on
+                    // a row's own (#848).
+                    if top > 0 {
+                        LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .clear, location: 0.55),
+                                               .init(color: .black, location: 1)],
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: top)
+                    }
                     Color.black
                     if footed {
                         LinearGradient(colors: [.black, .black.opacity(0.3)], startPoint: .top, endPoint: .bottom)

@@ -621,6 +621,24 @@ final class Hoard: ObservableObject {
         return true
     }
 
+    /// Handed to Smart Downloads before it was begun: it leaves no row and
+    /// no failure behind (SmartDownloads.takes).
+    func handedOff(_ download: any PageDownload) {
+        let id = ObjectIdentifier(download)
+        forget(id)
+        canceled.insert(id)
+        fetches.removeAll { $0.id == id }
+        tell()
+    }
+
+    /// Smart Downloads' row, gone as the page's engine takes the file back.
+    func withdraw(_ download: any PageDownload) {
+        let id = ObjectIdentifier(download)
+        forget(id)
+        fetches.removeAll { $0.id == id }
+        tell()
+    }
+
     func dismiss(_ fetch: Fetch) {
         if fetch.failed { browser?.discardPart(of: fetch.id) }
         forget(fetch.id)

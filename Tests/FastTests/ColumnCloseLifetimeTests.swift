@@ -24,7 +24,7 @@ struct ColumnCloseLifetimeTests {
         }
         let fade = try #require(layer.animation(forKey: "column.leave.fade") as? CABasicAnimation)
         let give = try #require(layer.animation(forKey: "column.leave.give") as? CABasicAnimation)
-        #expect(fade.duration == 0.14 && give.duration == 0.14)
+        #expect(fade.duration == 0.11 && give.duration == 0.11)
         #expect((fade.fromValue as? Int) == 1 && (fade.toValue as? Int) == 0)
         let end = try #require(give.toValue as? NSValue).caTransform3DValue
         #expect(abs(end.m11 - 0.96) < 0.001 && abs(end.m22 - 0.96) < 0.001)

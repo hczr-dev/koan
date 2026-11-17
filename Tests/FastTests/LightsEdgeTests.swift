@@ -43,14 +43,14 @@ struct LightsEdgeTests {
         }
     }
 
-    @Test func restingAtTheEdgeForPointThreeFiveSecondsOpens() {
+    @Test func restingAtTheEdgeForPointTwoSecondsOpens() {
         var pointer = Pointer()
         let onPage = pointer.look()
         #expect(!onPage)
         #expect(pointer.dwell.until == nil)
         let entered = pointer.move(to: CGPoint(x: 3, y: 300))
         #expect(!entered)
-        let beforeDeadline = pointer.advance(0.29)
+        let beforeDeadline = pointer.advance(0.14)
         #expect(!beforeDeadline)
         let rested = pointer.advance(0.06)
         #expect(rested)
@@ -221,7 +221,7 @@ struct LightsEdgeTests {
     }
 
     @Test func theColumnWaitsWithoutChangingTheStripOrMotion() {
-        #expect(EdgeReach.edgeRest == 0.3)
+        #expect(EdgeReach.edgeRest == 0.15)
         #expect(TopReach.edgeRest == 0.15)
         #expect(EdgeReach.letGo < 0.13)
         #expect(Metrics.edgeWall == 3)
