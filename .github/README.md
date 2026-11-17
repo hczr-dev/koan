@@ -2,16 +2,16 @@
 
 # Koan
 
-My take on [Yab](https://github.com/yetanotherbrowser/yab), the Mac browser. I liked Yab but wanted it to feel more like Zen, so I forked it and kept going.
+My version of [Yab](https://github.com/yetanotherbrowser/yab), an Arc-like Mac browser. I really liked Yab but wanted it to feel more like Zen, as I think it misses a few things (such as having the address bar on top AND the sidebar both autohiding), so I forked it and kept going.
 
 What's different:
 
-- The address bar sits on the window itself, Zen style. With auto-hide on, it slides down from the top when you need it and gets out of the way when you don't.
-- Focus mode blocks the sites that eat my day, and you can lock it so turning it off isn't one click away. App blockers and Shortcuts can turn it on and lock it too: `open -g "yab-focus://lock?minutes=50"`.
-- Downloads go through aria2 by default, so big files come in faster. Torrents and magnet links work too.
+- The address bar sits on the window itself like on Zen.
+- Focus mode blocks the sites that eat your time, and you can lock it so turning it off isn't one click away. App blockers and Shortcuts can turn it on and lock it too: `open -g "yab-focus://lock?minutes=50"`.
+- Aria2 is integrated for downloads, so big files come in faster and torrents and magnet links work out of thhe box.
 - Smaller things: web panels next to the page, highlights that stay on pages, only one tab playing sound at a time, downloads sorted into folders, idle tabs put to sleep to save memory.
 
-Pages run in WebKit, the engine Safari uses, and any site that needs it can go to Chromium instead. No account, nothing to sign in to.
+Pages run in WebKit, the engine Safari uses, and any site that needs it can go to Chromium instead (You can change that if you want though). No account, nothing to sign in to.
 
 ## Getting it
 
@@ -24,8 +24,8 @@ scripts/custom/build-dev.sh
 open build/Koan.app
 ```
 
-I pull in Yab's updates regularly with `scripts/custom/sync-upstream.sh`.
+Yab's updates are pulled daily via a Github CI (which is basically why some of Yab's strings persist to avoid conflicts with the upstream version) with `scripts/custom/sync-upstream.sh`.
 
 ## Credit
 
-Almost all of this is Yab's work. Koan is a fork under the same Apache 2.0 license, and my changes are in the git history. It isn't affiliated with or endorsed by Yab, and "Yab" is their trademark ([TRADEMARKS.md](../TRADEMARKS.md)).
+Almost all of this is Yab's work. Koan is a fork under the same Apache 2.0 license. It isn't affiliated with or endorsed by Yab, and "Yab" is their trademark ([TRADEMARKS.md](../TRADEMARKS.md)).
