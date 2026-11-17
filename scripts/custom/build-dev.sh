@@ -53,4 +53,17 @@ else
   CEF_DIR="$OFFICIAL"
   echo "Chromium: the official CEF build (no H.264 or AAC)"
 fi
-YAB_CEF=1 YAB_UNIVERSAL=0 YAB_CEF_DIR="$CEF_DIR" YAB_CEF_HELPER="$HELPER" exec ./build.sh "$@"
+export YAB_CEF=1 YAB_UNIVERSAL=0 YAB_CEF_DIR="$CEF_DIR" YAB_CEF_HELPER="$HELPER"
+# The app's own words say Koan: a branded copy of the sources (brand.py) is
+# built in build/branded, so this repository stays Yab's code and merges
+# from upstream never conflict over wording. The app lands in build/.
+MIRROR="build/branded"
+mkdir -p "$MIRROR"
+rsync -a --checksum --delete --exclude '/build/' --exclude '/.build/' --exclude '/.git/' \
+  --exclude '/Sources/' --exclude '/build.sh' --exclude '/Android/' --exclude '/Phone/' --exclude '/demos/' --exclude '/videos/' \
+  ./ "$MIRROR/"
+python3 -I scripts/custom/brand.py "$PWD" "$MIRROR" "$YAB_BRAND_NAME"
+(cd "$MIRROR" && ./build.sh "$@")
+rm -rf "build/$YAB_BRAND_NAME.app"
+ditto "$MIRROR/build/$YAB_BRAND_NAME.app" "build/$YAB_BRAND_NAME.app"
+echo "built: build/$YAB_BRAND_NAME.app"
