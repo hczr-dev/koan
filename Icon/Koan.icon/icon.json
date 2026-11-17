@@ -2,7 +2,7 @@
   "fill-specializations": [
     {
       "value": {
-        "solid": "srgb:0.94118,0.60392,0.70980,1.00000"
+        "solid": "srgb:0.95686,0.70196,0.78039,1.00000"
       }
     },
     {
@@ -16,23 +16,18 @@
     {
       "layers": [
         {
-          "name": "Seed",
-          "image-name": "seed.svg",
-          "glass": true
-        },
-        {
-          "name": "Enso",
-          "image-name": "enso.svg",
-          "glass": true
+          "name": "Ink",
+          "image-name": "ink.svg",
+          "glass": false
         }
       ],
       "shadow": {
         "kind": "neutral",
-        "opacity": 0.45
+        "opacity": 0.15
       },
       "translucency": {
-        "enabled": true,
-        "value": 0.3
+        "enabled": false,
+        "value": 0.5
       }
     },
     {
