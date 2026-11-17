@@ -16,14 +16,13 @@ if [ -r "$SIGNING" ]; then
   set -a; . "$SIGNING"; set +a
   echo "Signing: ${YAB_SIGN_IDENTITY:-ad hoc}"
 fi
-# Koan: its own name, icon and bundle id (Yab's TRADEMARKS.md). The id ends
-# in .dev so Yab's code keeps it a development build: no update feed, its
-# own folder, never the installed Yab's.
+# Koan: its own name, icon and bundle id (Yab's TRADEMARKS.md). build.sh
+# marks it a development build in its Info.plist (YabDevelopmentBuild), so it
+# keeps its own folder and no update feed, never the installed Yab's.
 export YAB_BRAND_NAME="${YAB_BRAND_NAME:-Koan}"
 export YAB_BUNDLE_ICON="${YAB_BUNDLE_ICON:-Icon/Koan.icon}"
 export YAB_BRAND_MARK="${YAB_BRAND_MARK:-Icon/KoanMark.png}"
-export YAB_DEV_BUNDLE_ID="${YAB_DEV_BUNDLE_ID:-io.github.hczr-dev.koan.dev}"
-case "$YAB_DEV_BUNDLE_ID" in *.dev) ;; *) echo "YAB_DEV_BUNDLE_ID must end in .dev, or Yab's code takes it for the shipping Yab and its data" >&2; exit 1 ;; esac
+export YAB_DEV_BUNDLE_ID="${YAB_DEV_BUNDLE_ID:-com.hczr.koan}"
 # yab Dev's settings and sign-ins come along once (scripts/custom/move-to-koan.sh).
 bash scripts/custom/move-to-koan.sh "$YAB_DEV_BUNDLE_ID" || true
 CACHE="$HOME/.local/state/yab-spike-cef"

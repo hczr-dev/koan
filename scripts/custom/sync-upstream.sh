@@ -1,7 +1,7 @@
 #!/bin/bash
 # Usage: scripts/custom/sync-upstream.sh [--build]
-# Brings upstream Yab's main into the custom branch, keeping ours: fetches
-# origin, moves the local main to it, and merges it into custom. Git's
+# Brings the newest Koan (GitHub's main, where Yab's main is merged every
+# night) or, with no koan remote, upstream Yab's main into the custom branch. Git's
 # rerere remembers how a conflict was settled, so the same one is settled
 # once. With --build, the Dev app is built again (scripts/custom/build-dev.sh).
 # Changes nothing on uncommitted work, or on a conflict it has not seen
@@ -15,15 +15,23 @@ git config rerere.autoupdate true
 HERE="$(git rev-parse --abbrev-ref HEAD)"
 [ "$HERE" = "$BRANCH" ] || { say "on $HERE, not $BRANCH: nothing merged"; exit 1; }
 [ -z "$(git status --porcelain --untracked-files=no)" ] || { say "uncommitted changes: nothing merged"; exit 1; }
-git fetch --quiet origin main
-git branch -f main origin/main >/dev/null
-NEW="$(git rev-list --count HEAD..origin/main)"
+# With Koan on GitHub, its nightly Action merges Yab's main there
+# (.github/workflows/sync-yab.yml): this Mac follows that. Without it, Yab's
+# main is merged here.
+if git remote get-url koan >/dev/null 2>&1; then
+  SOURCE=koan
+else
+  SOURCE=origin
+fi
+git fetch --quiet "$SOURCE" main
+[ "$SOURCE" = origin ] && git branch -f main origin/main >/dev/null
+NEW="$(git rev-list --count HEAD.."$SOURCE"/main)"
 if [ "$NEW" = 0 ]; then
-  say "up to date with upstream main"
+  say "up to date with $SOURCE main"
   [ "${1:-}" = --build ] || exit 0
   [ -n "${YAB_SYNC_ALWAYS_BUILD:-}" ] || exit 0
 else
-  if git merge --no-edit -m "Merge upstream main into custom" origin/main >/dev/null 2>&1; then
+  if git merge --no-edit -m "Merge $SOURCE main" "$SOURCE"/main >/dev/null 2>&1; then
     say "merged $NEW upstream commit(s)"
   elif [ -z "$(git diff --name-only --diff-filter=U)" ]; then
     # Every conflict settled the way it was settled before (rerere).

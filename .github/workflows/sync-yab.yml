@@ -1,0 +1,59 @@
+# Every night, merge Yab's main into Koan's main. A conflict, or a push GitHub
+# refuses, opens an issue instead and changes nothing.
+#
+# GitHub won't let the default token push changes to workflow files. When Yab
+# changes one of its own, the push needs a token that may: add a fine-grained
+# token for this repository (Contents, Workflows and Issues: read and write)
+# as the SYNC_TOKEN secret.
+name: Sync with Yab
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency: sync-yab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
+
+      - name: Merge Yab's main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "hczr-dev"
+          git config user.email "65070679+hczr-dev@users.noreply.github.com"
+          git remote add yab https://github.com/yetanotherbrowser/yab.git
+          git fetch --quiet yab main
+          new=$(git rev-list --count HEAD..yab/main)
+          if [ "$new" = 0 ]; then echo "Up to date with Yab."; exit 0; fi
+
+          report() {
+            title="Merging Yab's main needs a hand"
+            num=$(gh issue list --state open --search "\"$title\" in:title" --json number -q '.[0].number')
+            if [ -n "$num" ]; then gh issue comment "$num" --body "$1"; else gh issue create --title "$title" --body "$1"; fi
+          }
+
+          if ! git merge --no-edit -m "Merge Yab's main" yab/main; then
+            files=$(git diff --name-only --diff-filter=U | sed 's/^/- /')
+            git merge --abort
+            report "$(printf '%s new commits from yetanotherbrowser/yab conflict with Koan in:\n\n%s\n\nRun scripts/custom/sync-upstream.sh on the Mac, settle them, and push.' "$new" "$files")"
+            exit 1
+          fi
+          if ! git push origin HEAD:main; then
+            report "$(printf 'Merged %s commits from Yab, but GitHub refused the push, most likely because Yab changed a workflow file. Add a SYNC_TOKEN secret (see .github/workflows/sync-yab.yml) and run this again.' "$new")"
+            exit 1
+          fi
+          echo "Merged $new commits from Yab."

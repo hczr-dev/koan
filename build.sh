@@ -762,6 +762,13 @@ if [ -n "${YAB_DEBUG:-}" ]; then
   /usr/libexec/PlistBuddy -c "Add :YabDebug string $YAB_DEBUG" "$APP/Contents/Info.plist"
 fi
 
+# A development build under an id that doesn't end in .dev (a fork's own,
+# scripts/custom) still keeps its own folder and no update feed (Store.development).
+if [ "$STEP" = "app" ]; then
+  /usr/libexec/PlistBuddy -c "Delete :YabDevelopmentBuild" "$APP/Contents/Info.plist" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Add :YabDevelopmentBuild bool true" "$APP/Contents/Info.plist"
+fi
+
 # Smart Downloads' engine inside the app: this Mac's aria2, with the
 # libraries it loads, signed ad hoc on its own before the app is sealed
 # (scripts/custom/bundle-aria2.sh). Nothing on a Mac without aria2.

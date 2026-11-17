@@ -47,6 +47,8 @@ public enum Store {
     /// own folder and keychain items, so both can be open at once and
     /// nothing tried in one reaches the other.
     public static let development = Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true
+        // A fork under its own id (Koan's com.hczr.koan) says so in its Info.plist.
+        || Bundle.main.object(forInfoDictionaryKey: "YabDevelopmentBuild") as? Bool == true
     private static let prerelease = Bundle.main.bundleIdentifier?.hasSuffix(".prerelease.dev") == true
 
     /// What the app keeps its things under, its folder, its keychain
