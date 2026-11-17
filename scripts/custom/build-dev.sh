@@ -63,6 +63,24 @@ rsync -a --checksum --delete --exclude '/build/' --exclude '/.build/' --exclude 
   ./ "$MIRROR/"
 python3 -I scripts/custom/brand.py "$PWD" "$MIRROR" "$YAB_BRAND_NAME"
 (cd "$MIRROR" && ./build.sh "$@")
-rm -rf "build/$YAB_BRAND_NAME.app"
-ditto "$MIRROR/build/$YAB_BRAND_NAME.app" "build/$YAB_BRAND_NAME.app"
-echo "built: build/$YAB_BRAND_NAME.app"
+# An open Koan keeps running from its bundle: Chromium starts its helpers
+# from there, and a renderer from another build than its browser fails.
+# So the new build waits beside it (build/.Koan.next.app) and goes in place
+# once every process of the open one has ended.
+# KOAN_OUT: another folder for the app (a release built beside your own).
+OUT="${KOAN_OUT:-build}"
+mkdir -p "$OUT"
+TARGET="$(cd "$OUT" && pwd)/$YAB_BRAND_NAME.app"
+NEXT="$(cd "$OUT" && pwd)/.$YAB_BRAND_NAME.next.app"
+rm -rf "$NEXT"
+ditto "$MIRROR/build/$YAB_BRAND_NAME.app" "$NEXT"
+if pgrep -f "^$TARGET/Contents/" >/dev/null; then
+  # Its own session, so launchd ending the sync job doesn't end the wait.
+  python3 -I -c 'import subprocess, sys; subprocess.Popen(sys.argv[1:], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)' \
+    /bin/bash -c 'while pgrep -f "^$1/Contents/" >/dev/null; do sleep 15; done; [ -d "$2" ] && rm -rf "$1" && mv "$2" "$1"' _ "$TARGET" "$NEXT"
+  echo "built: $NEXT ($YAB_BRAND_NAME is open: it replaces build/$YAB_BRAND_NAME.app when it quits)"
+else
+  rm -rf "$TARGET"
+  mv "$NEXT" "$TARGET"
+  echo "built: $TARGET"
+fi

@@ -23,6 +23,11 @@ final class ChromiumProcess {
     private var downloads: [String: ChromiumDownload] = [:]
     private var endingRenderers: [String: Task<Void, Never>] = [:]
     private var losses: [Date] = []
+    /// Koan: put down for going unused, not lost (ChromiumRest.swift).
+    private var resting = false
+    private var restEnding: Task<Void, Never>?
+    private var restClock: Timer?
+    private var unusedSince: Date?
     private struct WeakPage { weak var value: ChromiumPage? }
 
     /// Local mirrors only. A census never creates or wakes a remote page.
@@ -174,6 +179,7 @@ final class ChromiumProcess {
         nativeHooks = await core.nativeHooks
         await ChromiumEnergySaver.apply(to: core)
         client = core
+        watchForRest()
         ChromiumGeolocation.connected(hooks: nativeHooks)
         ChromiumTabGroups.shared.start()
         ShieldChromium.tell()
@@ -188,6 +194,9 @@ final class ChromiumProcess {
     }
 
     func connection() async throws -> YabCoreClient {
+        // A helper being put down is waited for: a new one beside it would
+        // share its data root.
+        if let restEnding { await restEnding.value }
         if let client { return client }
         if let starting { return try await starting.value }
         if let diagnostic = originalCallerDiagnostic {
@@ -344,6 +353,9 @@ final class ChromiumProcess {
         }
     }
     private func exited(endedBy: YabCoreError?, starting: Bool = false) {
+        let rested = resting
+        resting = false
+        restClock?.invalidate(); restClock = nil; unusedSince = nil
         let exit = processExit
         let endedPID = process?.processIdentifier
         LaunchJournal.record("core.lost", child: endedPID)
@@ -359,10 +371,10 @@ final class ChromiumProcess {
         lostDownloads.forEach { $0.fail(YabCoreError.disconnected) }
         let live = pages.values.compactMap(\.value)
         pages.removeAll(); early.removeAll(); adopting.removeAll()
-        let recover = mayRecover()
+        let recover = rested ? false : mayRecover()
         LaunchJournal.record(recover ? "core.recovery.allowed" : "core.recovery.stopped", child: endedPID)
         live.forEach { $0.helperExited(recover: recover) }
-        Self.noteLoss(exit, pid: endedPID, endedBy: endedBy, starting: starting, recovering: recover && !live.isEmpty)
+        if !rested { Self.noteLoss(exit, pid: endedPID, endedBy: endedBy, starting: starting, recovering: recover && !live.isEmpty) }
         if let directory { try? FileManager.default.removeItem(at: directory) }
         directory = nil
     }
@@ -430,6 +442,56 @@ final class ChromiumProcess {
         losses = losses.filter { now.timeIntervalSince($0) < 120 } + [now]
         return losses.count <= 3
     }
+    // MARK: Koan: resting while unused (ChromiumRest)
+
+    private func watchForRest() {
+        restClock?.invalidate()
+        unusedSince = nil
+        guard ChromiumRest.allowed else { return }
+        let timer = Timer(timeInterval: ChromiumRest.look, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.restIfUnused() }
+        }
+        timer.tolerance = ChromiumRest.look / 3
+        RunLoop.main.add(timer, forMode: .common)
+        restClock = timer
+    }
+
+    /// Nothing of Chromium's in use, no page, panel, download or install
+    /// in flight, for `ChromiumRest.after`: the helper is put down, and the
+    /// next page that wants it starts it again.
+    private func restIfUnused() {
+        let unused = ChromiumRest.allowed && client != nil && !resting && restEnding == nil && starting == nil
+            && originalCallerDiagnostic == nil && livePages.isEmpty && downloads.isEmpty && endingRenderers.isEmpty
+            && adopting.isEmpty && ChromiumSidePanel.shared.panels.isEmpty
+        guard unused else { unusedSince = nil; return }
+        let now = Date()
+        guard let since = unusedSince else { unusedSince = now; return }
+        guard now.timeIntervalSince(since) >= ChromiumRest.after else { return }
+        rest()
+    }
+
+    private func rest() {
+        guard let core = client else { return }
+        resting = true
+        restClock?.invalidate(); restClock = nil
+        let child = process
+        let exit = processExit
+        let token = generation
+        LaunchJournal.record("core.rest", child: child?.processIdentifier)
+        restEnding = Task { @MainActor [weak self] in
+            // Its line closed, the helper ends itself, as when Yab quits;
+            // one still there after a few seconds is told to.
+            await core.disconnect()
+            if await exit?.end(within: .seconds(5)) == nil, child?.isRunning == true {
+                child?.terminate()
+                _ = await exit?.end(within: .seconds(5))
+            }
+            guard let self else { return }
+            if self.resting, self.generation == token { self.exited(endedBy: .disconnected) }
+            self.restEnding = nil
+        }
+    }
+
     // Used only by the isolated acceptance probe. Closing the socket also makes
     // CEF close all producer windows when the application exits.
     func crashForTesting() { if Store.testing { process?.terminate() } }

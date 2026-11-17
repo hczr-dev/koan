@@ -93,7 +93,12 @@ final class WindowBackdropView: NSView {
         wantsLayer = true
         glass.material = .hudWindow
         glass.blendingMode = .behindWindow
-        glass.state = .active
+        // Koan: the frost is worked out live only in the window in front.
+        // Behind another app's, it is AppKit's still, inactive material, and
+        // the window server stops blurring what is behind the window on
+        // every frame it draws (a video playing in a window left open).
+        // `backdrop.frostAlways` keeps it live everywhere, as Yab has it.
+        glass.state = Store.settings.bool(forKey: "backdrop.frostAlways") ? .active : .followsWindowActiveState
         glass.frame = bounds
         glass.autoresizingMask = [.width, .height]
         coating.frame = bounds
