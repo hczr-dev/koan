@@ -7,11 +7,11 @@ My version of [Yab](https://github.com/yetanotherbrowser/yab), an Arc-like Mac b
 What's different:
 
 - The address bar sits on the window itself like on Zen.
-- Focus mode blocks the sites that eat your time, and you can lock it so turning it off isn't one click away. App blockers and Shortcuts can turn it on and lock it too: `open -g "yab-focus://lock?minutes=50"`.
-- Aria2 is integrated for downloads, so big files come in faster and torrents and magnet links work out of thhe box.
+- Focus mode blocks the sites that consume your time and you can lock it so turning it off isn't one click away. App blockers and Shortcuts can turn it on and lock it too: `open -g "yab-focus://lock?minutes=50"`.
+- Aria2 is integrated for downloads : big files come in faster (parallelization) and torrents and magnet links work out of the box.
 - Smaller things: web panels next to the page, highlights that stay on pages, only one tab playing sound at a time, downloads sorted into folders, idle tabs put to sleep to save memory.
 
-Pages run in WebKit, the engine Safari uses, and any site that needs it can go to Chromium instead (You can change that if you want though). No account, nothing to sign in to.
+Pages run in WebKit and any site that needs it can use Chromium instead (You can change that if you want though). No account and nothing to sign in to.
 
 ## Getting it
 
