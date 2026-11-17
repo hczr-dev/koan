@@ -18,6 +18,8 @@ Pages run in WebKit and any site that needs it can use Chromium instead (You can
 
 Download the latest zip from [Releases](https://github.com/hczr-dev/koan/releases), unzip it and drag Koan into Applications. It isn't notarized yet, so the first time you open it, right-click Koan and choose Open (or allow it in System Settings › Privacy & Security).
 
+The download is WebKit only, with no Chromium inside. Chromium tabs need Yab's own Chromium build, which I can't redistribute, so if you want them, install Yab and build Koan yourself: the build script picks up Yab's Chromium automatically.
+
 You can also build it yourself with Xcode 26:
 
 ```bash

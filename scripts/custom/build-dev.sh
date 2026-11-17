@@ -25,6 +25,11 @@ export YAB_BRAND_MARK="${YAB_BRAND_MARK:-Icon/KoanMark.png}"
 export YAB_DEV_BUNDLE_ID="${YAB_DEV_BUNDLE_ID:-com.hczr.koan}"
 # yab Dev's settings and sign-ins come along once (scripts/custom/move-to-koan.sh).
 bash scripts/custom/move-to-koan.sh "$YAB_DEV_BUNDLE_ID" || true
+if [ "${KOAN_CHROMIUM:-1}" = 0 ]; then
+# KOAN_CHROMIUM=0: WebKit only, no Chromium inside (the public download).
+export YAB_CEF=0 YAB_UNIVERSAL=0
+echo "Chromium: none, WebKit only"
+else
 CACHE="$HOME/.local/state/yab-spike-cef"
 OFFICIAL="$(bash scripts/cef/fetch.sh)"
 OFFICIAL="${OFFICIAL%/}"
@@ -50,9 +55,12 @@ else
   HELPER="$CACHE/yabcore-v2/Page core.app/Contents/MacOS/YabCore"
   [ -x "$HELPER" ] || YAB_CEF_DIR="$OFFICIAL" bash YabCore/build.sh >/dev/null
   CEF_DIR="$OFFICIAL"
-  echo "Chromium: the official CEF build (no H.264 or AAC)"
+  # Yab's helper now asks for Yab's own CEF patches (native tab groups), so
+  # pages don't load on this one: kept for building where no Yab is installed.
+  echo "Chromium: the official CEF build (no H.264 or AAC; Chromium pages need Yab's patched build)"
 fi
 export YAB_CEF=1 YAB_UNIVERSAL=0 YAB_CEF_DIR="$CEF_DIR" YAB_CEF_HELPER="$HELPER"
+fi
 # The app's own words say Koan: a branded copy of the sources (brand.py) is
 # built in build/branded, so this repository stays Yab's code and merges
 # from upstream never conflict over wording. The app lands in build/.
