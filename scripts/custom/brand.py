@@ -18,7 +18,7 @@ Beside the Swift: Settings' strings table, the AppleScript dictionary's
 words, the messages page scripts show, and a few lines that are more than
 the name (PATCHES: the welcome's "yet another browser.", Settings › About).
 """
-import os, re, shutil, sys
+import json, os, re, shutil, sys
 
 SRC, DST, NAME = sys.argv[1], sys.argv[2], sys.argv[3]
 LITERAL = re.compile(r'"(?:[^"\\\n]|\\.)*"')
@@ -75,40 +75,25 @@ def brand_swift(source):
 PROMPTS = re.compile(r'(<string>[^<]*?)\bYab (asks|reads|sends)')
 def brand_build(text):
     text = PROMPTS.sub(lambda m: m.group(1) + NAME + ' ' + m.group(2), text)
-    return text.replace('<string>© 2026 Serafim Korablev · Yab</string>',
-                        f'<string>{NAME}, built on Yab © 2026 Serafim Korablev</string>')
+    return text.replace('<string>© 2026 Serafim Korablev · Yab</string>', '<string>© 2026 hczr-dev</string>')
 
-# Lines that say more than the name, in the branded copy only. One that no
-# longer matches upstream's is said and skipped, never half applied.
-LOWER = NAME.lower()
-PATCHES = {
-    'Sources/Fast/WelcomeHero.swift': [
-        # The welcome's name, folding into the header's logotype as Yab's
-        # "yet another browser." folds into "yab".
-        ('static let texts: [(String, Int?)] = [("y", 0), ("et ", nil), ("a", 1), ("nother ", nil), ("b", 2), ("rowser", nil), (".", nil)]',
-         f'static let texts: [(String, Int?)] = [("{LOWER}", 0), (".", nil)]'),
-        ('static let headerTexts: [(String, Int?)] = [("y", 0), ("a", 1), ("b", 2)]',
-         f'static let headerTexts: [(String, Int?)] = [("{LOWER}", 0)]'),
-        ('static let words: [[Int]] = [[0, 1], [2, 3], [4, 5, 6]]', 'static let words: [[Int]] = [[0, 1]]'),
-        # The pen's line goes under the name.
-        ('return (CTLineGetOffsetForStringIndex(line, 4, nil), CTLineGetOffsetForStringIndex(line, 11, nil))',
-         f'return (CTLineGetOffsetForStringIndex(line, 0, nil), CTLineGetOffsetForStringIndex(line, {len(LOWER)}, nil))'),
-    ],
-    'Sources/Fast/SettingsCorePages.swift': [
-        ('Text("yet another browser.").font(.system(size: 20, weight: .semibold))',
-         f'Text("{LOWER}.").font(.system(size: 20, weight: .semibold))'),
-        ('Text("A browser for your Mac.")', 'Text("A browser for your Mac, built on Yab.")'),
-    ],
-    'Sources/Fast/Mcp.swift': [
-        ('Tools for Yab (yet another browser), the user', f'Tools for {NAME}, the user'),
-    ],
-}
+# Koan's own edits over Yab's files (scripts/custom/koan-edits.json): what
+# its welcome and Settings say, and what it leaves out (the built-in agent,
+# Mail, invites, Yab's store and icons). Each is an exact text, matched after
+# the name above is put in; one that no longer matches upstream's is said
+# and skipped, never half applied, and the build goes on.
+with open(os.path.join(SRC, 'scripts/custom/koan-edits.json'), encoding='utf-8') as f:
+    EDITS = json.load(f)
+EDITED = {}
+for e in EDITS:
+    EDITED.setdefault(e['file'], []).append(e)
+missed = []
 def patch(rel, text):
-    for old, new in PATCHES.get(rel, []):
-        if old in text:
-            text = text.replace(old, new)
+    for e in EDITED.get(rel, []):
+        if text.count(e['old']) == 1:
+            text = text.replace(e['old'], e['new'])
         else:
-            print(f'brand: {rel} no longer has: {old[:70]}', file=sys.stderr)
+            missed.append(f"{rel}: {e['why']} ({text.count(e['old'])} matches)")
     return text
 
 # Settings' strings table: both sides, as the Swift asking for them is.
@@ -119,6 +104,7 @@ def brand_strings(text):
 # The AppleScript dictionary: its words, never its codes or names.
 SDEF = re.compile(r'((?:description|title)=")([^"]*)(")')
 def brand_sdef(text):
+    text = text.replace('<suite name="Yab Suite"', f'<suite name="{NAME} Suite"')
     return SDEF.sub(lambda m: m.group(1) + WORD.sub(NAME, m.group(2)) + m.group(3), text)
 
 # Page scripts: the messages in their string literals.
@@ -182,4 +168,17 @@ with open(os.path.join(SRC, 'build.sh'), encoding='utf-8') as f:
     if put(os.path.join(DST, 'build.sh'), brand_build(f.read()).encode('utf-8')):
         changed += 1
 os.chmod(os.path.join(DST, 'build.sh'), 0o755)
-print(f'brand: {NAME} in {branded} source files, {changed} written')
+# Settings › Credits › Acknowledgements: what Koan owes Yab, first (Apache 2.0, section 4).
+with open(os.path.join(SRC, 'THIRD_PARTY_NOTICES.md'), encoding='utf-8') as f:
+    notices = f.read()
+with open(os.path.join(SRC, 'NOTICE'), encoding='utf-8') as f:
+    yab_notice = f.read()
+head = (f'{NAME} is built on Yab (https://github.com/yetanotherbrowser/yab), '
+        'Copyright 2026 Serafim Korablev, under the Apache License 2.0 (LICENSE). '
+        "Yab's NOTICE follows.\n\n" + yab_notice + '\n\n---\n\n')
+if put(os.path.join(DST, 'THIRD_PARTY_NOTICES.md'), (head + notices).encode('utf-8')):
+    changed += 1
+applied = len(EDITS) - len(missed)
+print(f'brand: {NAME} in {branded} source files, {changed} written, {applied} of {len(EDITS)} edits')
+for m in missed:
+    print(f'brand: edit not applied, upstream changed: {m}', file=sys.stderr)

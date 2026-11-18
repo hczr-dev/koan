@@ -10,6 +10,7 @@ What's different:
 - Focus mode blocks the sites that consume your time and you can lock it so turning it off isn't one click away. App blockers and Shortcuts can turn it on and lock it too: `open -g "yab-focus://lock?minutes=50"`.
 - Aria2 is integrated for downloads : big files come in faster (parallelization) and torrents and magnet links work out of the box.
 - It's lighter when idle: Chromium only runs while a page needs it and shuts down a few minutes after the last one (250 to 350 MB back), and the window's see-through blur is only live in the window you're using.
+- No built-in agent and no mail client. The AI that's left (writing help, translation, tidying tabs) runs on your Mac, and the AI switch in Settings turns it off.
 - Smaller things: web panels next to the page, highlights that stay on pages, only one tab playing sound at a time, downloads sorted into folders, idle tabs put to sleep to save memory.
 
 Pages run in WebKit and any site that needs it can use Chromium instead (You can change that if you want though). No account and nothing to sign in to.

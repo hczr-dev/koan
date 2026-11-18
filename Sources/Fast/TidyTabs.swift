@@ -123,6 +123,8 @@ enum TidyTabs {
     /// Whether anything can answer: an AI you connected, or this Mac's.
     static var can: Bool {
         if stand != nil { return true }
+        // A connected plan doesn't outrank AI in Yab set to Off.
+        guard AIUse.allows(.asked) else { return false }
         return available(stand: false, agents: agents, apple: FormModel.tidyReady)
     }
 

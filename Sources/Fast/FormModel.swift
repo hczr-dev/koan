@@ -45,7 +45,8 @@ enum FormModel {
     }
 
     /// Tidy has its own switch; other AI choices do not disable its local model.
-    static var tidyReady: Bool { permitsTidy { hardwareReady } }
+    /// With AI in Yab Off, no tidying either: Off means the Mac's model too.
+    static var tidyReady: Bool { AIUse.allows(.asked) && permitsTidy { hardwareReady } }
 
     static func permitsTidy(availability: () -> Bool) -> Bool { availability() }
 

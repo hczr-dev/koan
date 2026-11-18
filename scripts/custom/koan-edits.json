@@ -1,0 +1,344 @@
+[
+ {
+  "file": "Sources/YabStore/KoanEdition.swift",
+  "old": "public static let on = false",
+  "new": "public static let on = true",
+  "why": "Koan builds"
+ },
+ {
+  "file": "Sources/Fast/WelcomeHero.swift",
+  "old": "static let texts: [(String, Int?)] = [(\"y\", 0), (\"et \", nil), (\"a\", 1), (\"nother \", nil), (\"b\", 2), (\"rowser\", nil), (\".\", nil)]",
+  "new": "static let texts: [(String, Int?)] = [(\"koan\", 0), (\".\", nil)]",
+  "why": "the name, folding into the header"
+ },
+ {
+  "file": "Sources/Fast/WelcomeHero.swift",
+  "old": "static let headerTexts: [(String, Int?)] = [(\"y\", 0), (\"a\", 1), (\"b\", 2)]",
+  "new": "static let headerTexts: [(String, Int?)] = [(\"koan\", 0)]",
+  "why": "the header logotype"
+ },
+ {
+  "file": "Sources/Fast/WelcomeHero.swift",
+  "old": "static let words: [[Int]] = [[0, 1], [2, 3], [4, 5, 6]]",
+  "new": "static let words: [[Int]] = [[0, 1]]",
+  "why": "one word"
+ },
+ {
+  "file": "Sources/Fast/WelcomeHero.swift",
+  "old": "return (CTLineGetOffsetForStringIndex(line, 4, nil), CTLineGetOffsetForStringIndex(line, 11, nil))",
+  "new": "return (CTLineGetOffsetForStringIndex(line, 0, nil), CTLineGetOffsetForStringIndex(line, 4, nil))",
+  "why": "the pen under the name"
+ },
+ {
+  "file": "Sources/Fast/WelcomeHero.swift",
+  "old": "static func accent(dark: Bool) -> NSColor { resolved(.controlAccentColor, dark: dark) }",
+  "new": "static func accent(dark: Bool) -> NSColor {\n        // Koan's rose, the ensō's, for the full stop and the pen.\n        dark ? NSColor(srgbRed: 0.90, green: 0.54, blue: 0.66, alpha: 1) : NSColor(srgbRed: 0.76, green: 0.25, blue: 0.43, alpha: 1)\n    }",
+  "why": "rose, not the Mac accent"
+ },
+ {
+  "file": "Sources/Fast/Welcome.swift",
+  "old": "Text(\"Everything Arc had. Your agent, in your tabs. And fast.\")",
+  "new": "Text(\"A quiet browser for a busy web.\")",
+  "why": "tagline"
+ },
+ {
+  "file": "Sources/Fast/WelcomeSample.swift",
+  "old": "static let firstTitle = \"Everything you\\u{2019}re used to. Only fast.\"",
+  "new": "static let firstTitle = \"Everything you need. Nothing in the way.\"",
+  "why": "chapter 1"
+ },
+ {
+  "file": "Sources/Fast/WelcomeSample.swift",
+  "old": "WelcomeStage.foldsFirstChapter ? [.task, .watch, .results] : [.pins, .peek, .find, .task, .watch, .results]",
+  "new": "KoanEdition.on ? [.pins, .peek, .find] : WelcomeStage.foldsFirstChapter ? [.task, .watch, .results] : [.pins, .peek, .find, .task, .watch, .results]",
+  "why": "no agent chapter"
+ },
+ {
+  "file": "Sources/Fast/WelcomeConnect.swift",
+  "old": "        connected(stage).map(AgentSetupModel.skilled) == true ? [.connect, .howto] : [.connect]",
+  "new": "        if KoanEdition.on { return [] }\n        return connected(stage).map(AgentSetupModel.skilled) == true ? [.connect, .howto] : [.connect]",
+  "why": "no Connect your agent"
+ },
+ {
+  "file": "Sources/Fast/WelcomeVault.swift",
+  "old": "\"Pick the one you use. Koan fills from it, and so does your agent.\"",
+  "new": "\"Pick the one you use. Koan fills from it.\"",
+  "why": "no agent"
+ },
+ {
+  "file": "Sources/Fast/WelcomeVault.swift",
+  "old": "\"Fill from \\(offer.name) here, and let your agent sign in with it.\"",
+  "new": "\"Fill from \\(offer.name) on every site.\"",
+  "why": "no agent"
+ },
+ {
+  "file": "Sources/Fast/WelcomeVault.swift",
+  "old": "(symbol: \"agent.face\", tint: .systemBlue, words: \"Your agent signs in with it\")",
+  "new": "(symbol: \"doc\", tint: .systemYellow, words: \"New sign-ins saved to it\")",
+  "why": "no agent"
+ },
+ {
+  "file": "Sources/Fast/ProviderConsent.swift",
+  "old": "    func allows(_ cli: String) -> Bool {\n        ProviderLaunchPermit.atomic {",
+  "new": "    func allows(_ cli: String) -> Bool {\n        // Koan: no built-in agent, so no plan is ever connected.\n        if KoanEdition.on { return false }\n        return ProviderLaunchPermit.atomic {",
+  "why": "no plan connected"
+ },
+ {
+  "file": "Sources/Fast/AgentTask.swift",
+  "old": "    static var installed: Bool {\n        [\"claude\", \"codex\", \"cursor\"]",
+  "new": "    static var installed: Bool {\n        if KoanEdition.on { return false }\n        return [\"claude\", \"codex\", \"cursor\"]",
+  "why": "no agent"
+ },
+ {
+  "file": "Sources/Fast/AgentTask.swift",
+  "old": "    static var ready: Bool {\n        if let assumed = assumedInTests, Store.testing {",
+  "new": "    static var ready: Bool {\n        if KoanEdition.on { return false }\n        if let assumed = assumedInTests, Store.testing {",
+  "why": "no agent"
+ },
+ {
+  "file": "Sources/Fast/AgentTask.swift",
+  "old": "    static var connected: Bool {\n        guard AIUse.allows(.asked) else { return false }",
+  "new": "    static var connected: Bool {\n        if KoanEdition.on { return false }\n        guard AIUse.allows(.asked) else { return false }",
+  "why": "no agent"
+ },
+ {
+  "file": "Sources/Fast/AIUseGate.swift",
+  "old": "@MainActor static var chats: Bool { allows(.asked) && (Agents.ready || !Chats.shared.all.isEmpty) }",
+  "new": "@MainActor static var chats: Bool { !KoanEdition.on && allows(.asked) && (Agents.ready || !Chats.shared.all.isEmpty) }",
+  "why": "no chat column"
+ },
+ {
+  "file": "Sources/Fast/AIUseGate.swift",
+  "old": "@MainActor static var connectOffered: Bool { level() != .off && !reachable }",
+  "new": "@MainActor static var connectOffered: Bool { !KoanEdition.on && level() != .off && !reachable }",
+  "why": "no Connect row"
+ },
+ {
+  "file": "Sources/Fast/WarmClaude.swift",
+  "old": "    private func start(_ ready: @escaping (Bool) -> Void) {\n",
+  "new": "    private func start(_ ready: @escaping (Bool) -> Void) {\n        // Koan: Claude Code is never started behind your back.\n        if KoanEdition.on { return ready(false) }\n",
+  "why": "no Claude in the background"
+ },
+ {
+  "file": "Sources/Fast/TidyTabs.swift",
+  "old": "static var agents: [String] { connectedProviders(in: AgentSetupModel.shared) }",
+  "new": "static var agents: [String] { KoanEdition.on ? [] : connectedProviders(in: AgentSetupModel.shared) }",
+  "why": "tidy on this Mac only"
+ },
+ {
+  "file": "Sources/Fast/SelectionCommands.swift",
+  "old": "executor: \"agent\"),\n        .init(id: \"define\"",
+  "new": "executor: \"mac\"),\n        .init(id: \"define\"",
+  "why": "Explain simply on this Mac"
+ },
+ {
+  "file": "Sources/Fast/AgentSettings.swift",
+  "old": "            FeatureRow(.models, detail: modelsDetail, model: model)\n                .settingsAnchor(\"ai-models\")\n",
+  "new": "            if !KoanEdition.on {\n                FeatureRow(.models, detail: modelsDetail, model: model)\n                    .settingsAnchor(\"ai-models\")\n            }\n",
+  "why": "AI page: no plans"
+ },
+ {
+  "file": "Sources/Fast/AgentSettings.swift",
+  "old": "        Section {\n            FeatureRow(.agents, detail: agentsDetail, model: model)",
+  "new": "        if !KoanEdition.on {\n        Section {\n            FeatureRow(.agents, detail: agentsDetail, model: model)",
+  "why": "AI page: no agent rows"
+ },
+ {
+  "file": "Sources/Fast/AgentSettings.swift",
+  "old": "                .settingsAnchor(\"ai-assistants\")\n        }\n        BoostAISettings()",
+  "new": "                .settingsAnchor(\"ai-assistants\")\n        }\n        }\n        Group { if !KoanEdition.on { BoostAISettings() } }",
+  "why": "AI page: no agent rows"
+ },
+ {
+  "file": "Sources/Fast/SettingsWindow.swift",
+  "old": "    var available: Bool {\n        if self == .engine { return EngineRules.available }",
+  "new": "    var available: Bool {\n        // Koan: no built-in agent, no invites, its own icon.\n        if KoanEdition.on, [.models, .agents, .assistants, .siteButtons, .agentRoutines, .agentMemory, .agentSkills, .inviteFriends, .bestFriend, .appIcon].contains(self) { return false }\n        if self == .engine { return EngineRules.available }",
+  "why": "pages gone"
+ },
+ {
+  "file": "Sources/MailCore/MailExperiment.swift",
+  "old": "        defaults.bool(forKey: key) && defaults.bool(forKey: \"mail\")",
+  "new": "        !KoanEdition.on && defaults.bool(forKey: key) && defaults.bool(forKey: \"mail\")",
+  "why": "no Mail"
+ },
+ {
+  "file": "Sources/Fast/ExperimentalSettings.swift",
+  "old": "            SettingsRow(\"Mail\", detail: \"Experimental support for Gmail",
+  "new": "            if !KoanEdition.on {\n            SettingsRow(\"Mail\", detail: \"Experimental support for Gmail",
+  "why": "no Mail switch"
+ },
+ {
+  "file": "Sources/Fast/ExperimentalSettings.swift",
+  "old": "            .settingsAnchor(\"experimental-mail\")",
+  "new": "            .settingsAnchor(\"experimental-mail\")\n            }",
+  "why": "no Mail switch"
+ },
+ {
+  "file": "Sources/Fast/FieldViews.swift",
+  "old": "                    // Invite a Friend, beside it on the same glass: words,\n                    // not a badge (Invites.swift, Settings › Invite Friends).\n                    Button {",
+  "new": "                    if !KoanEdition.on {\n                    Button {",
+  "why": "no invites"
+ },
+ {
+  "file": "Sources/Fast/FieldViews.swift",
+  "old": "                    .accessibilityLabel(\"Invite a Friend\")\n                    .opacity(query.choosingAbout && query.acting != nil ? 0 : 1)",
+  "new": "                    .accessibilityLabel(\"Invite a Friend\")\n                    .opacity(query.choosingAbout && query.acting != nil ? 0 : 1)\n                    }",
+  "why": "no invites"
+ },
+ {
+  "file": "Sources/Fast/Query.swift",
+  "old": "        case .wrapped: return Wrapped.shared.due != nil",
+  "new": "        case .wrapped: return !KoanEdition.on && Wrapped.shared.due != nil\n        case .invite: return !KoanEdition.on",
+  "why": "no Wrapped, no invites"
+ },
+ {
+  "file": "Sources/Fast/FieldPlaces.swift",
+  "old": "            if let wrapped { nowRows.append(",
+  "new": "            if let wrapped, !KoanEdition.on { nowRows.append(",
+  "why": "no Wrapped"
+ },
+ {
+  "file": "Sources/Fast/FieldPlaces.swift",
+  "old": "        case .mail, .purchases: return MailExperiment.enabled()",
+  "new": "        case .store: return !KoanEdition.on\n        case .mail, .purchases: return MailExperiment.enabled()",
+  "why": "no Yab's store"
+ },
+ {
+  "file": "Sources/Fast/StoreCatalog.swift",
+  "old": "        guard !fetching, !Store.testing else { return }\n        if !force, let fetched",
+  "new": "        guard !fetching, !Store.testing, !KoanEdition.on else { return }\n        if !force, let fetched",
+  "why": "no calls to Yab's site"
+ },
+ {
+  "file": "Sources/Fast/Links.swift",
+  "old": "    static func writeFeedback(on window: NSWindow? = nil) {\n",
+  "new": "    static func writeFeedback(on window: NSWindow? = nil) {\n        // Koan: an issue on its GitHub.\n        if KoanEdition.on { NSWorkspace.shared.open(KoanEdition.issues); return }\n",
+  "why": "feedback to Koan"
+ },
+ {
+  "file": "Sources/Fast/Links.swift",
+  "old": "        menu.addItem(withTitle: \"Change App Icon…\", action: #selector(dockChangeAppIcon), keyEquivalent: \"\").target = self",
+  "new": "        if !KoanEdition.on { menu.addItem(withTitle: \"Change App Icon…\", action: #selector(dockChangeAppIcon), keyEquivalent: \"\").target = self }",
+  "why": "no Yab's icons"
+ },
+ {
+  "file": "Sources/Fast/SettingsCorePages.swift",
+  "old": "            AppIconRow(model: model)\n                .settingsAnchor(\"app-icon\")",
+  "new": "            if !KoanEdition.on {\n                AppIconRow(model: model)\n                    .settingsAnchor(\"app-icon\")\n            }",
+  "why": "no Yab's icons"
+ },
+ {
+  "file": "Sources/Fast/SettingsCorePages.swift",
+  "old": "        Section {\n            HStack(spacing: 12) {\n                Image(nsImage: NSApplication.shared.applicationIconImage)\n                    .resizable()\n                    .frame(width: 40, height: 40)",
+  "new": "        if KoanEdition.on {\n            Section { KoanUpdateRow() }\n        } else {\n        Section {\n            HStack(spacing: 12) {\n                Image(nsImage: NSApplication.shared.applicationIconImage)\n                    .resizable()\n                    .frame(width: 40, height: 40)",
+  "why": "updates from GitHub"
+ },
+ {
+  "file": "Sources/Fast/SettingsCorePages.swift",
+  "old": "            .settingsAnchor(\"update-automatically\")\n        }",
+  "new": "            .settingsAnchor(\"update-automatically\")\n        }\n        }",
+  "why": "updates from GitHub"
+ },
+ {
+  "file": "Sources/Fast/SettingsCorePages.swift",
+  "old": "Text(\"yet another browser.\").font(.system(size: 20, weight: .semibold))",
+  "new": "Text(\"koan.\").font(.system(size: 20, weight: .semibold))",
+  "why": "About"
+ },
+ {
+  "file": "Sources/Fast/SettingsCorePages.swift",
+  "old": "Text(\"A browser for your Mac.\")",
+  "new": "Text(\"A quiet browser for a busy web.\")",
+  "why": "About"
+ },
+ {
+  "file": "Sources/Fast/SettingsCorePages.swift",
+  "old": "Text(\"© 2026 Serafim Korablev\")",
+  "new": "Text(\"© 2026 hczr-dev\")",
+  "why": "About"
+ },
+ {
+  "file": "Sources/Fast/SettingsCorePages.swift",
+  "old": "        StampAboutSection()\n        Section {\n            link(\"Send feedback\") { Links.writeFeedback() }\n                .settingsAnchor(\"feedback\")\n            link(\"Join the community on X\") { Links.openFromSettings(Links.community) }",
+  "new": "        Section {\n            link(\"Report an Issue\") { Links.writeFeedback() }\n                .settingsAnchor(\"feedback\")\n            link(\"Koan on GitHub\") { Links.openFromSettings(KoanEdition.home) }",
+  "why": "About links"
+ },
+ {
+  "file": "Sources/Fast/SettingsCorePages.swift",
+  "old": "FeatureRow(.credits, detail: \"Search, Arc and Raycast, with thanks.\", model: model)\n                .settingsAnchor(\"credits\")\n            FeatureRow(.inviteFriends, detail: \"Invite friends and unlock exclusive app icons.\", model: model)\n                .settingsAnchor(\"invite\")",
+  "new": "FeatureRow(.credits, detail: \"Yab, Arc and Raycast, with thanks.\", model: model)\n                .settingsAnchor(\"credits\")",
+  "why": "About"
+ },
+ {
+  "file": "Sources/Fast/SettingsCorePages.swift",
+  "old": "            CreditRow(art: \"Search\", name: \"Search\", by: \"Office Commun\",\n                      thanks: \"The open-source browser Koan grew from. Every page here started as theirs.\",",
+  "new": "            CreditRow(art: \"Yab\", name: \"Yab\", by: \"Serafim Korablev\",\n                      thanks: \"The open-source browser Koan is built on, under the Apache 2.0 license. Almost every page here started as Yab\\u{2019}s.\",\n                      site: \"https://github.com/yetanotherbrowser/yab\")\n            CreditRow(art: \"Search\", name: \"Search\", by: \"Office Commun\",\n                      thanks: \"The open-source browser Yab grew from.\",",
+  "why": "credit Yab"
+ },
+ {
+  "file": "Sources/Fast/SyncSettings.swift",
+  "old": "Text(\"1. Install Koan from yetanotherbrowser.com.\")",
+  "new": "Text(\"1. Install Koan from github.com/hczr-dev/koan.\")",
+  "why": "where Koan comes from"
+ },
+ {
+  "file": "Sources/Fast/Mcp.swift",
+  "old": "Tools for Yab (yet another browser), the user",
+  "new": "Tools for Koan, the user",
+  "why": "name"
+ },
+ {
+  "file": "Sources/Fast/Prefs.swift",
+  "old": "            ?? NSColor(hex: \"E3E3E5\")!",
+  "new": "            ?? NSColor(hex: KoanEdition.on ? \"F3D9E1\" : \"E3E3E5\")!",
+  "why": "a new window's color: Koan's blush"
+ },
+ {
+  "file": "Sources/Fast/AgentSettings.swift",
+  "old": "(defaults[.commands].cli == nil ? \"on this Mac or your agent\" : \"longer ones on \\(defaults.name(.commands))\")",
+  "new": "(KoanEdition.on || defaults[.commands].cli == nil ? \"on this Mac\" : \"longer ones on \\(defaults.name(.commands))\")",
+  "why": "AI page: commands run on this Mac"
+ },
+ {
+  "file": "Sources/Fast/AssistantHost.swift",
+  "old": "    func start() {\n        AssistantReach.shared.apply()",
+  "new": "    func start() {\n        // Koan: no cloud assistants, so no line to Yab's relay.\n        if KoanEdition.on { stop(); return }\n        AssistantReach.shared.apply()",
+  "why": "no cloud assistants"
+ },
+ {
+  "file": "Sources/Fast/SettingsWindow.swift",
+  "old": "case .ai: return \"Use your \\(AgentSetupModel.list(AgentPlan.all.map(\\.name))) subscriptions in Koan.\"",
+  "new": "case .ai: return \"Writing help, translation and tidying, on this Mac.\"",
+  "why": "AI page: what it is now"
+ },
+ {
+  "file": "Sources/Fast/AgentSettings.swift",
+  "old": "            HStack(alignment: .center, spacing: 12) {\n                VStack(alignment: .leading, spacing: 3) { // design: SettingsRow's own gap\n                    Text(SettingsWords.text(\"Default view\"))",
+  "new": "            if !KoanEdition.on {\n            HStack(alignment: .center, spacing: 12) {\n                VStack(alignment: .leading, spacing: 3) { // design: SettingsRow's own gap\n                    Text(SettingsWords.text(\"Default view\"))",
+  "why": "AI page: no chat view"
+ },
+ {
+  "file": "Sources/Fast/AgentSettings.swift",
+  "old": "            .settingsAnchor(\"agents-ask-opens\")\n        }",
+  "new": "            .settingsAnchor(\"agents-ask-opens\")\n            }\n        }",
+  "why": "AI page: no chat view"
+ },
+ {
+  "file": "Sources/Fast/SettingsCorePages.swift",
+  "old": "SettingsRow(\"Keep Mac Awake\", detail: \"While plugged in, so tasks keep running.\")",
+  "new": "SettingsRow(\"Keep Mac Awake\", detail: \"While plugged in, so downloads keep going.\")",
+  "why": "no agent tasks"
+ },
+ {
+  "file": "Sources/Fast/SettingsIndex.swift",
+  "old": "fixed.filter { $0.id != \"engine-default\" || EngineRules.available }",
+  "new": "fixed.filter { ($0.id != \"engine-default\" || EngineRules.available)\n            && !(KoanEdition.on && [\"agents-routines\", \"agents-ask-opens\", \"agents-memory\", \"agents-skills\", \"app-icon\", \"invite\", \"community\"].contains($0.id)) }",
+  "why": "search: no removed rows"
+ },
+ {
+  "file": "Sources/Fast/PageEngineSelection.swift",
+  "old": "        return choice ?? (bundledChromium && supportsChromium ? .chromium : nil)",
+  "new": "        // Koan: pages open in WebKit unless you choose Chromium; sites that\n        // need Chromium still go there by their rules.\n        if KoanEdition.on { return choice ?? .webKit }\n        return choice ?? (bundledChromium && supportsChromium ? .chromium : nil)",
+  "why": "WebKit first"
+ }
+]

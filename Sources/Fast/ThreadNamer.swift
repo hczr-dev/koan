@@ -66,7 +66,8 @@ final class ThreadNamer {
     }
 
     private var macAllowed: Bool {
-        FormModel.ready && (!Store.testing || ProcessInfo.processInfo.environment["YAB_THREAD_MAC"] == "1")
+        // Named unasked, so background work: not under When Asked.
+        FormModel.ready && AIUse.allows(.background) && (!Store.testing || ProcessInfo.processInfo.environment["YAB_THREAD_MAC"] == "1")
     }
 
     private var stand: String? {
@@ -91,7 +92,7 @@ final class ThreadNamer {
     }
 
     nonisolated static func mac(_ prompt: String) async -> DayThreads.Naming? {
-        guard FormModel.ready else { return nil }
+        guard FormModel.ready, AIUse.allows(.background) else { return nil }
         #if canImport(FoundationModels)
         if #available(macOS 26, *) {
             let session = LanguageModelSession(instructions: DayThreads.instructions)
