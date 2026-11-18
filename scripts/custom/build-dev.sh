@@ -26,7 +26,7 @@ export YAB_DEV_BUNDLE_ID="${YAB_DEV_BUNDLE_ID:-com.hczr.koan}"
 # yab Dev's settings and sign-ins come along once (scripts/custom/move-to-koan.sh).
 bash scripts/custom/move-to-koan.sh "$YAB_DEV_BUNDLE_ID" || true
 if [ "${KOAN_CHROMIUM:-1}" = 0 ]; then
-# KOAN_CHROMIUM=0: WebKit only, no Chromium inside (the public download).
+# KOAN_CHROMIUM=0: WebKit only, no Chromium inside (a much smaller app).
 export YAB_CEF=0 YAB_UNIVERSAL=0
 echo "Chromium: none, WebKit only"
 else
