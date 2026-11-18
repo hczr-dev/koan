@@ -83,9 +83,13 @@ NEXT="$(cd "$OUT" && pwd)/.$YAB_BRAND_NAME.next.app"
 rm -rf "$NEXT"
 ditto "$MIRROR/build/$YAB_BRAND_NAME.app" "$NEXT"
 if pgrep -f "^$TARGET/Contents/" >/dev/null; then
+  # One waiter at a time: an older one is waiting for the same quit.
+  pkill -f "koan-swap-wait $TARGET" 2>/dev/null || true
   # Its own session, so launchd ending the sync job doesn't end the wait.
+  # Checked every second, and put in place by renames, so a quick quit and
+  # reopen still opens the new build.
   python3 -I -c 'import subprocess, sys; subprocess.Popen(sys.argv[1:], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)' \
-    /bin/bash -c 'while pgrep -f "^$1/Contents/" >/dev/null; do sleep 15; done; [ -d "$2" ] && rm -rf "$1" && mv "$2" "$1"' _ "$TARGET" "$NEXT"
+    /bin/bash -c 'while pgrep -f "^$1/Contents/" >/dev/null; do sleep 1; done; [ -d "$2" ] || exit 0; mv "$1" "$1.old" && mv "$2" "$1" && rm -rf "$1.old"' koan-swap-wait "$TARGET" "$NEXT"
   echo "built: $NEXT ($YAB_BRAND_NAME is open: it replaces build/$YAB_BRAND_NAME.app when it quits)"
 else
   rm -rf "$TARGET"

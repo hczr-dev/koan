@@ -340,5 +340,11 @@
   "old": "        return choice ?? (bundledChromium && supportsChromium ? .chromium : nil)",
   "new": "        // Koan: pages open in WebKit unless you choose Chromium; sites that\n        // need Chromium still go there by their rules.\n        if KoanEdition.on { return choice ?? .webKit }\n        return choice ?? (bundledChromium && supportsChromium ? .chromium : nil)",
   "why": "WebKit first"
+ },
+ {
+  "file": "Sources/YabStore/AppleModelAccess.swift",
+  "old": "    private static func planConnected(in defaults: UserDefaults) -> Bool {\n",
+  "new": "    private static func planConnected(in defaults: UserDefaults) -> Bool {\n        // Koan has no plans: the Mac's model never stands aside for one.\n        if KoanEdition.on { return false }\n",
+  "why": "Apple Intelligence stays on with an old plan connection"
  }
 ]
