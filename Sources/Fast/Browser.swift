@@ -189,7 +189,7 @@ final class Browser: NSObject, ObservableObject, Relaying {
             if stagePair == nil, (oldValue == nil) != (activeID == nil) { columnAfresh(preservingScroll: true) }
             // Another tab in front by any other way: the switch waiting
             // for its page's first frame is off (`select`).
-            if switchPending != activeID { switchPending = nil }
+            if switchPending != activeID { releaseSwitch() }
             // Back on a minimized video's tab: leaving it floats it again.
             minimizeHold.shown(activeID)
             searchSuggestions.update(nil, engine: searchEngine.engine) {}
@@ -4296,7 +4296,7 @@ final class Browser: NSObject, ObservableObject, Relaying {
         // its page's frame: that switch is off, and its page comes back.
         if tab.id == activeID, switchPending != nil {
             let stage = heldStage
-            switchPending = nil
+            releaseSwitch()
             if let stage, let page = tab.builtPage { stage.show(page, of: tab.id, tab: tab) }
             return
         }
@@ -4325,11 +4325,9 @@ final class Browser: NSObject, ObservableObject, Relaying {
         // the page has drawn its first frame there, which it couldn't while
         // that redraw held the thread its frames go through. 80 ms at most.
         if early, Narrow.deferSwitch, let web = tab.webKitOnly("WebKit native page lifecycle", build: false) {
-            switchPending = tab.id
-            heldStage = web.superview as? StageView
-            heldStage?.heldFor = tab.id
+            let attempt = holdSwitch(to: tab.id, on: web.superview as? StageView)
             let finish = { [weak self, weak tab] in
-                guard let self, let tab, self.switchPending == tab.id else { return }
+                guard let self, let tab, self.hold.holds(tab.id, attempt: attempt) else { return }
                 self.finishSelect(tab)
             }
             StageView.afterNextDrawing(web) { DispatchQueue.main.async { finish() } }
@@ -4340,11 +4338,9 @@ final class Browser: NSObject, ObservableObject, Relaying {
         if Narrow.deferSwitch, !LinkGap.cut("chromium.defer"), let page = tab.builtPage as? ChromiumPage,
            let stage = early ? page.superview as? StageView : StageView.earlyChromium(from: active, to: tab,
                single: stagePair == nil && !splitBook.frozen && stages.compactMap { $0 }.count == 1 && pair(of: tab.id) == nil) {
-            switchPending = tab.id
-            heldStage = stage
-            stage.heldFor = tab.id
+            let attempt = holdSwitch(to: tab.id, on: stage)
             let finish = { [weak self, weak tab] in
-                guard let self, let tab, self.switchPending == tab.id else { return }
+                guard let self, let tab, self.hold.holds(tab.id, attempt: attempt) else { return }
                 self.finishSelect(tab)
             }
             page.afterShown { DispatchQueue.main.async { finish() } }
@@ -4374,14 +4370,28 @@ final class Browser: NSObject, ObservableObject, Relaying {
         row?()
     }
 
-    @ObservationIgnored private(set) var switchPending: Tab.ID? {
-        didSet { if switchPending == nil { heldStage?.heldFor = nil; heldStage = nil } }
-    }
+    @ObservationIgnored private var hold = SwitchHold()
+    var switchPending: Tab.ID? { hold.tab }
     @ObservationIgnored private weak var heldStage: StageView?
+
+    /// Holds the switch to `id`, on `stage` if given, letting go of any
+    /// earlier hold and its stage first. The attempt is what its finishers check.
+    private func holdSwitch(to id: Tab.ID, on stage: StageView?) -> Int {
+        releaseSwitch()
+        heldStage = stage
+        stage?.heldFor = id
+        return hold.hold(id)
+    }
+
+    private func releaseSwitch() {
+        hold.release()
+        heldStage?.heldFor = nil
+        heldStage = nil
+    }
 
     /// The switch, written: the tab in front, the window redrawn for it.
     private func finishSelect(_ tab: Tab) {
-        switchPending = nil
+        releaseSwitch()
         guard tab.id != activeID, tabs.contains(where: { $0 === tab }) else { return }
         cancelVideoRequest(for: tab)
         // Coming back to the tab whose video is out brings it home first, so
@@ -5600,7 +5610,7 @@ final class Browser: NSObject, ObservableObject, Relaying {
         // address; a tab with none is no folder's (Folders.settle).
         if let nest, tabs.contains(where: { $0 === tab }) { land(tab, in: nest) }
         if foreground {
-            switchPending = tab.id
+            let attempt = holdSwitch(to: tab.id, on: nil)
             // Once: the page's frames and the 0.3 s both call it, and the
             // second putting the row back would bring a tab closed between
             // them (⌘W, or a script's close) back into the row.
@@ -5609,8 +5619,8 @@ final class Browser: NSObject, ObservableObject, Relaying {
                 guard !fronted else { return }
                 fronted = true
                 row()
-                guard let self, let tab, self.switchPending == tab.id else { return }
-                self.switchPending = nil
+                guard let self, let tab, self.hold.holds(tab.id, attempt: attempt) else { return }
+                self.releaseSwitch()
                 guard self.tabs.contains(where: { $0 === tab }), self.activeID != tab.id else { return }
                 OpenTrace.time("front") {
                     self.leaving()

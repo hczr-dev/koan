@@ -2418,7 +2418,9 @@ struct DragStrip: View {
     var doubled: (@MainActor () -> Void)? = nil
 
     // Nothing to read or press: under the lights and the tabs, SwiftUI's
-    // accessibility hit test stopped here and found neither.
+    // accessibility hit test stopped here and found neither. In the
+    // column's header hidden was not enough: its band stops short of the
+    // lights (SideBar.lightsEnd).
     var body: some View { Host(strip: self).accessibilityHidden(true) }
 
     private struct Host: NSViewRepresentable {
