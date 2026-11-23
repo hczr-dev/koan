@@ -567,6 +567,7 @@ final class Hoard: ObservableObject {
     /// while to hand the new download over, and a row that went on the
     /// click looked like a click that did nothing.
     func retry(_ fetch: Fetch) {
+        if let smart = downloads[fetch.id] as? SmartFetch { retrySmart(fetch, smart); return }
         let download = downloads[fetch.id]
         let data = resume[fetch.id]
         let request = download?.originalRequest
@@ -602,6 +603,58 @@ final class Hoard: ObservableObject {
         // name rather than coming back as "name 2".
         if data == nil { browser?.discardPart(of: fetch.id, keepingDestination: true) }
         download.restartDownload(from: data, fallback: browser?.active?.builtPage, done: took)
+    }
+
+    // MARK: - Smart Downloads' rows
+
+    /// The Smart Downloads job behind a row, if it is one.
+    func smart(_ fetch: Fetch) -> SmartFetch? { downloads[fetch.id] as? SmartFetch }
+
+    /// Stopped where it is: the row says Paused, aria2 keeps what it has.
+    func pauseSmart(_ fetch: Fetch) {
+        guard let smart = downloads[fetch.id] as? SmartFetch, smart.status != .resolving,
+              let i = fetches.firstIndex(where: { $0.id == fetch.id }) else { return }
+        fetches[i].failed = true
+        fetches[i].paused = true
+        smart.status = .paused
+        smart.onPause?()
+        tell()
+    }
+
+    /// A paused row goes on from where it was; a failed one starts again
+    /// as a row of its own.
+    private func retrySmart(_ fetch: Fetch, _ smart: SmartFetch) {
+        if fetch.paused, let i = fetches.firstIndex(where: { $0.id == fetch.id }) {
+            fetches[i].failed = false
+            fetches[i].paused = false
+            smart.status = .waiting
+            smart.onResume?()
+            tell()
+        } else {
+            let again = smart.onAgain
+            dismiss(fetch)
+            again?()
+        }
+    }
+
+    /// What aria2 said of one: its name once it is known (a magnet's), and
+    /// whether it is paused, from outside the list too.
+    func smartChanged(_ download: SmartFetch, name: String, paused: Bool) {
+        let id = ObjectIdentifier(download)
+        if let i = fetches.firstIndex(where: { $0.id == id }) {
+            if !name.isEmpty, fetches[i].name != name { fetches[i].name = name }
+            if fetches[i].paused != paused, paused || fetches[i].paused {
+                fetches[i].paused = paused
+                fetches[i].failed = paused
+            }
+        }
+        nudge(download)
+    }
+
+    /// Its words are heard again with the next beat of the meter.
+    func nudge(_ download: any PageDownload) {
+        let id = ObjectIdentifier(download)
+        moved(id, heard[id] ?? meter.steps[id] ?? Step())
     }
 
     /// The row tried again becomes the new download's. False, and the new
@@ -1070,6 +1123,7 @@ final class Hoard: ObservableObject {
     }
 
     private func forget(_ id: ObjectIdentifier) {
+        if downloads[id] is SmartFetch { SmartDownloads.shared.forgetFetch(id) }
         if let download = downloads[id] { DownloadDestinations.release(download.downloadID) }
         arriving[id] = nil
         watches[id] = nil
@@ -2468,16 +2522,22 @@ struct HoardList: View {
         private var step: Hoard.Step { self.meter.steps[fetch.id] ?? Hoard.Step() }
 
         var body: some View {
-            Line(title: fetch.name, detail: fetch.paused ? "Paused" : fetch.failed ? "Couldn't download" : said,
+            Line(title: fetch.name, detail: HoardList.detail(fetch, step: step),
                  alarm: fetch.failed && !fetch.paused) {
                 HoardRowDial(fraction: step.fraction, failed: fetch.failed, unknown: step.fraction == nil && step.got > 0,
                              side: 20, tone: hoard.browser?.chorus.tone)
                     .opacity(hoard.carrying && hoard.fetches.first?.id == fetch.id ? 0 : 1)
                     .modifier(HoardRowSpot(hoard: hoard, on: hoard.fetches.first?.id == fetch.id, inset: 1, side: 20))
-            } end: { _ in
+            } end: { hovering in
                 HStack(spacing: 2) {
+                    if let smart = hoard.smart(fetch) {
+                        if hovering { Tool(symbol: "magnifyingglass", help: "Show in Finder") { smart.reveal() } }
+                        if !fetch.failed, smart.status != .resolving {
+                            Tool(symbol: "pause.fill", help: "Pause") { hoard.pauseSmart(fetch) }
+                        }
+                    }
                     if fetch.failed {
-                        Tool(symbol: "arrow.clockwise", help: fetch.paused ? "Resume" : "Try Again") { hoard.retry(fetch) }
+                        Tool(symbol: fetch.paused ? "play.fill" : "arrow.clockwise", help: fetch.paused ? "Resume" : "Try Again") { hoard.retry(fetch) }
                     }
                     Tool(symbol: "xmark", help: fetch.failed ? "Remove" : "Cancel") {
                         fetch.failed ? hoard.dismiss(fetch) : hoard.cancel(fetch)
@@ -2586,8 +2646,38 @@ struct HoardList: View {
         return bytes
     }()
 
+    /// A row's line under its name: how far it has got, or why it stopped.
+    static func detail(_ fetch: Hoard.Fetch, step: Hoard.Step) -> String {
+        let smart = SmartDownloads.shared.live(fetch.id)
+        if fetch.paused { return smart.map { smartSaid($0, step: step, paused: true) } ?? "Paused" }
+        if fetch.failed {
+            if let note = smart?.note, !note.isEmpty { return note }
+            return "Couldn't download"
+        }
+        return said(fetch, step: step)
+    }
+
+    /// A Smart Downloads row in words, with what aria2 knows and a page's
+    /// engine doesn't: "144 MB of 452 MB · 4.2 MB/s · 8 peers · 2 min".
+    static func smartSaid(_ smart: SmartFetch, step: Hoard.Step, paused: Bool = false) -> String {
+        func size(_ count: Int64) -> String { bytes.string(fromByteCount: count) }
+        if smart.status == .resolving { return smart.note.isEmpty ? "Starting…" : smart.note }
+        var parts: [String] = []
+        if step.total > 0 { parts.append("\(size(step.got)) of \(size(step.total))") } else if step.got > 0 { parts.append(size(step.got)) }
+        if paused { return (["Paused"] + parts).joined(separator: " · ") }
+        if parts.isEmpty { parts.append(smart.status == .waiting ? "Waiting…" : "Starting…") }
+        if smart.speed > 0 { parts.append("\(size(smart.speed))/s") }
+        if smart.kind == .torrent, smart.connections > 0 { parts.append("\(smart.connections) peers") }
+        if smart.speed > 0, step.total > step.got {
+            let left = Double(step.total - step.got) / Double(smart.speed)
+            parts.append(left < 60 ? "\(max(1, Int(left))) s" : left < 3600 ? "\(Int(left / 60)) min" : String(format: "%.1f h", left / 3600))
+        }
+        return parts.joined(separator: " · ")
+    }
+
     /// How far a download has got, in words: "144 MB of 452 MB · 13 min".
     static func said(_ fetch: Hoard.Fetch, step: Hoard.Step) -> String {
+        if let smart = SmartDownloads.shared.live(fetch.id) { return smartSaid(smart, step: step) }
         let bytes = Self.bytes
         guard step.total > 0 else {
             guard step.got > 0 else { return fetch.from.isEmpty ? "Starting…" : IDN.shown(fetch.from) }

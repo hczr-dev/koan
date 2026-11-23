@@ -19,9 +19,6 @@ struct SmartDownloadError: LocalizedError {
 @MainActor
 final class SmartDownloads: ObservableObject {
     static let shared = SmartDownloads()
-    /// `Browser.panelExtension` while the list is in the column.
-    static let marker = "yab.smart-downloads"
-
     enum Status: String { case resolving, waiting, active, paused, complete, error, removed }
     enum Kind: String { case torrent, link, debrid }
 
@@ -78,43 +75,54 @@ final class SmartDownloads: ObservableObject {
     // MARK: - adding
 
     /// Words pasted into the list: magnets and links, one a line.
-    func add(text: String) {
+    func add(text: String, show browser: Browser? = nil) {
         for line in text.split(whereSeparator: \.isNewline) {
             let word = line.trimmingCharacters(in: .whitespaces)
             guard let url = URL(string: word), let scheme = url.scheme?.lowercased() else { continue }
-            if scheme == "magnet" { add(magnet: url) } else if scheme == "http" || scheme == "https" { add(link: url) }
+            if scheme == "magnet" { add(magnet: url, show: browser) } else if scheme == "http" || scheme == "https" { add(link: url, show: browser) }
         }
     }
 
+    /// `browser` is the window whose downloads list shows the row: the one
+    /// the link came from, or the one in front.
     func add(magnet: URL, show browser: Browser? = nil) {
-        if let browser { open(in: browser) }
         let name = Self.magnetName(magnet)
+        let again: () -> Void = { [weak self, weak browser] in self?.add(magnet: magnet, show: browser) }
         if Debrid.service != .none, Debrid.key != nil {
             let id = "debrid-" + UUID().uuidString
-            jobs.insert(Job(id: id, name: name, kind: .debrid, status: .resolving, note: "Sending to \(Debrid.service.title)…"), at: 0)
+            let note = "Sending to \(Debrid.service.title)…"
+            jobs.insert(Job(id: id, name: name, kind: .debrid, status: .resolving, note: note), at: 0)
+            let fetch = mirror(id, name: name, source: magnet, origin: Debrid.service.title, kind: .debrid, browser: browser, again: again)
+            fetch?.note = note
             let text = magnet.absoluteString
-            Task { await viaDebrid(id) { note in try await Debrid.links(magnet: text, progress: note) } }
+            debridTasks[id] = Task { await viaDebrid(id) { note in try await Debrid.links(magnet: text, progress: note) } }
             return
         }
-        Task { await start("aria2.addUri", [[magnet.absoluteString], ["dir": Self.place(.torrent, name: nil).path]], name: name, kind: .torrent) }
+        let place = Self.place(.torrent, name: nil).path
+        Task { await start("aria2.addUri", [[magnet.absoluteString], ["dir": place]], name: name, kind: .torrent,
+                           source: magnet, origin: "Magnet link", browser: browser, again: again) }
     }
 
     func add(torrentFile file: URL, show browser: Browser? = nil) {
         guard let data = try? Data(contentsOf: file) else { return }
-        if let browser { open(in: browser) }
         let name = file.deletingPathExtension().lastPathComponent
-        Task { await start("aria2.addTorrent", [data.base64EncodedString(), [String](), ["dir": Self.place(.torrent, name: nil).path]], name: name, kind: .torrent) }
+        let place = Self.place(.torrent, name: nil).path
+        Task { await start("aria2.addTorrent", [data.base64EncodedString(), [String](), ["dir": place]], name: name, kind: .torrent,
+                           source: file, origin: "Torrent file", browser: browser,
+                           again: { [weak self, weak browser] in self?.add(torrentFile: file, show: browser) }) }
     }
 
     /// A link over many connections at once, with the page's cookies for its
     /// site; through the debrid service when there is one and the link is a
     /// file host's.
     func add(link: URL, referer: URL? = nil, store: WKWebsiteDataStore? = nil, show browser: Browser? = nil) {
-        if let browser = browser ?? BrowserWindows.shared.activeBrowser { open(in: browser) }
+        let again: () -> Void = { [weak self, weak browser] in self?.add(link: link, referer: referer, store: store, show: browser) }
         Task {
             if Debrid.service != .none, Debrid.key != nil, Debrid.hoster(link) {
                 let id = "debrid-" + UUID().uuidString
-                jobs.insert(Job(id: id, name: link.lastPathComponent, kind: .debrid, status: .resolving, note: "Unlocking with \(Debrid.service.title)…"), at: 0)
+                let note = "Unlocking with \(Debrid.service.title)…"
+                jobs.insert(Job(id: id, name: link.lastPathComponent, kind: .debrid, status: .resolving, note: note), at: 0)
+                mirror(id, name: link.lastPathComponent, source: link, origin: Debrid.service.title, kind: .debrid, browser: browser, again: again)?.note = note
                 await viaDebrid(id) { _ in [try await Debrid.unlock(link)] }
                 return
             }
@@ -130,45 +138,119 @@ final class SmartDownloads: ObservableObject {
             let name = link.lastPathComponent
             var options: [String: Any] = ["dir": Self.place(.link, name: name).path]
             if !headers.isEmpty { options["header"] = headers }
-            await start("aria2.addUri", [[link.absoluteString], options], name: name.isEmpty ? (link.host() ?? "Download") : name, kind: .link)
+            await start("aria2.addUri", [[link.absoluteString], options], name: name.isEmpty ? (link.host() ?? "Download") : name, kind: .link,
+                        source: link, origin: link.host() ?? "", browser: browser, again: again)
         }
     }
 
     private func viaDebrid(_ id: String, _ resolve: (@escaping @MainActor (String) -> Void) async throws -> [Debrid.File]) async {
         do {
             let files = try await resolve { [weak self] note in self?.update(id) { $0.note = note } }
+            guard !Task.isCancelled else { return }
             jobs.removeAll { $0.id == id }
+            debridTasks[id] = nil
+            // The files take the row's place, each with its own.
+            let was = taken.removeValue(forKey: id)
+            if let was { was.browser?.hoard.withdraw(was.fetch) }
             if files.isEmpty { throw SmartDownloadError("\(Debrid.service.title) gave no files") }
             for file in files {
                 await start("aria2.addUri", [[file.url.absoluteString], ["dir": Self.place(.link, name: file.name).path, "out": file.name]],
-                            name: file.name, kind: .debrid)
+                            name: file.name, kind: .debrid, source: was?.source ?? file.url, origin: Debrid.service.title,
+                            browser: was?.browser, again: was?.fetch.onAgain ?? {})
             }
         } catch {
+            guard !Task.isCancelled else { return }
+            debridTasks[id] = nil
             if jobs.contains(where: { $0.id == id }) {
                 update(id) { $0.status = .error; $0.note = error.localizedDescription }
             } else {
                 jobs.insert(Job(id: id, name: "Debrid", kind: .debrid, status: .error, note: error.localizedDescription), at: 0)
             }
+            failed(id, error.localizedDescription)
         }
     }
 
-    private func start(_ method: String, _ params: [Any], name: String, kind: Kind) async {
-        guard ensureEngine() else {
-            jobs.insert(Job(id: UUID().uuidString, name: name, kind: kind, status: .error, note: "aria2 isn't installed: brew install aria2"), at: 0)
-            return
+    /// A job that never got to aria2, its row said so.
+    private func failed(_ id: String, _ message: String) {
+        guard let entry = taken.removeValue(forKey: id) else { return }
+        entry.fetch.status = .error
+        entry.fetch.note = message
+        entry.browser?.download(entry.fetch, didFailWithError: SmartDownloadError(message), resumeData: nil)
+    }
+
+    private func start(_ method: String, _ params: [Any], name: String, kind: Kind, source: URL, origin: String,
+                       browser: Browser?, again: @escaping () -> Void) async {
+        func refuse(_ message: String) {
+            let id = UUID().uuidString
+            jobs.insert(Job(id: id, name: name, kind: kind, status: .error, note: message), at: 0)
+            mirror(id, name: name, source: source, origin: origin, kind: kind, browser: browser, again: again)
+            failed(id, message)
         }
+        guard ensureEngine() else { return refuse("aria2 isn't installed: brew install aria2") }
         do {
             let gid = try await call(method, params) as? String ?? UUID().uuidString
             jobs.insert(Job(id: gid, name: name, kind: kind, status: .waiting), at: 0)
+            let fetch = mirror(gid, name: name, source: source, origin: origin, kind: kind, browser: browser, again: again)
+            fetch?.status = .waiting
             tick()
         } catch {
-            jobs.insert(Job(id: UUID().uuidString, name: name, kind: kind, status: .error, note: error.localizedDescription), at: 0)
+            refuse(error.localizedDescription)
         }
     }
 
     private func update(_ id: String, _ change: (inout Job) -> Void) {
         guard let at = jobs.firstIndex(where: { $0.id == id }) else { return }
         change(&jobs[at])
+        if let entry = taken[id], jobs[at].status == .resolving {
+            entry.fetch.note = jobs[at].note
+            entry.browser?.hoard.nudge(entry.fetch)
+        }
+    }
+
+    // MARK: - rows in the downloads list
+
+    /// A job's row in a window's downloads list, beside the files its
+    /// pages download: the button, the list, All Downloads, the Dock's bar.
+    @discardableResult
+    private func mirror(_ id: String, name: String, source: URL, origin: String, kind: Kind, browser: Browser?,
+                        again: @escaping () -> Void) -> SmartFetch? {
+        guard let browser = browser ?? BrowserWindows.shared.activeBrowser else { return nil }
+        let fetch = SmartFetch(source: source, page: nil, pageURL: nil, pageTitle: nil)
+        fetch.origin = origin
+        fetch.kind = kind
+        fetch.gid = id
+        fetch.status = .resolving
+        fetch.onAgain = again
+        wire(fetch)
+        known[ObjectIdentifier(fetch)] = fetch
+        browser.hoard.begin(fetch, name: name, from: origin)
+        taken[id] = Taken(fetch: fetch, browser: browser, tab: nil, source: source, expected: 0, fromPage: false)
+        return fetch
+    }
+
+    /// What the row's buttons do, by the job's id as it stands then (a
+    /// magnet's changes once its files are known).
+    private func wire(_ fetch: SmartFetch) {
+        fetch.onCancel = { [weak self, weak fetch] in if let id = fetch?.gid { self?.dropTaken(id) } }
+        fetch.onPause = { [weak self, weak fetch] in if let id = fetch?.gid { self?.pause(gid: id) } }
+        fetch.onResume = { [weak self, weak fetch] in if let id = fetch?.gid { self?.resume(gid: id) } }
+    }
+
+    /// The row's own fetch, while the list has it.
+    func live(_ id: ObjectIdentifier) -> SmartFetch? { known[id] }
+
+    func forgetFetch(_ id: ObjectIdentifier) { known[id] = nil }
+
+    private var known: [ObjectIdentifier: SmartFetch] = [:]
+    private var debridTasks: [String: Task<Void, Never>] = [:]
+
+    /// Clipboard words that are a magnet or a link to fetch.
+    static func link(in text: String?) -> Bool {
+        guard let text else { return false }
+        return text.split(whereSeparator: \.isNewline).contains { line in
+            guard let url = URL(string: line.trimmingCharacters(in: .whitespaces)), let scheme = url.scheme?.lowercased() else { return false }
+            return scheme == "magnet" || ((scheme == "http" || scheme == "https") && url.host() != nil)
+        }
     }
 
     // MARK: - taken from the page's engine
@@ -182,6 +264,8 @@ final class SmartDownloads: ObservableObject {
         let source: URL
         /// What the page's engine was told the file weighs.
         let expected: Int64
+        /// False for a magnet, a pasted link: nothing to hand back to a page.
+        var fromPage = true
     }
     private var taken: [String: Taken] = [:]
     /// Addresses handed back to the page's engine: not taken again.
@@ -222,7 +306,11 @@ final class SmartDownloads: ObservableObject {
                 return
             }
             fetch.gid = gid
-            fetch.onCancel = { [weak self] in self?.dropTaken(gid) }
+            fetch.origin = url.host() ?? ""
+            fetch.kind = .link
+            fetch.status = .waiting
+            self.wire(fetch)
+            self.known[ObjectIdentifier(fetch)] = fetch
             self.taken[gid] = Taken(fetch: fetch, browser: browser, tab: tab, source: url, expected: expected)
             self.jobs.insert(Job(id: gid, name: file, kind: .link, status: .waiting), at: 0)
             self.tick()
@@ -234,10 +322,17 @@ final class SmartDownloads: ObservableObject {
     /// or handed back to the page's engine.
     private func follow(_ job: Job) {
         guard let taken = taken[job.id] else { return }
-        if job.total > 0 { taken.fetch.progress.totalUnitCount = job.total }
-        taken.fetch.progress.completedUnitCount = job.done
+        let fetch = taken.fetch
+        if job.total > 0 { fetch.progress.totalUnitCount = job.total }
+        fetch.progress.completedUnitCount = job.done
+        fetch.status = job.status
+        fetch.speed = job.speed
+        fetch.connections = job.connections
+        fetch.path = job.path
+        fetch.note = job.note
+        taken.browser?.hoard.smartChanged(fetch, name: job.name, paused: job.status == .paused)
         // Not what the page was sent: a sign-in page, an error page.
-        if job.total > 0, taken.expected > 0, job.total != taken.expected {
+        if taken.fromPage, job.total > 0, taken.expected > 0, job.total != taken.expected {
             handBack(taken, gid: job.id)
             return
         }
@@ -245,13 +340,13 @@ final class SmartDownloads: ObservableObject {
         case .complete:
             self.taken[job.id] = nil
             guard let file = job.path else { return }
-            taken.browser?.smartLanded(taken.fetch, file: file, source: taken.source)
+            taken.browser?.smartLanded(fetch, file: file, source: taken.source)
         case .error:
-            if job.done == 0 {
+            if taken.fromPage, job.done == 0 {
                 handBack(taken, gid: job.id)
             } else {
                 self.taken[job.id] = nil
-                taken.browser?.download(taken.fetch, didFailWithError: SmartDownloadError(job.note), resumeData: nil)
+                taken.browser?.download(fetch, didFailWithError: SmartDownloadError(job.note), resumeData: nil)
             }
         case .removed:
             self.taken[job.id] = nil
@@ -280,61 +375,33 @@ final class SmartDownloads: ObservableObject {
 
     private func dropTaken(_ gid: String) {
         taken[gid] = nil
+        debridTasks.removeValue(forKey: gid)?.cancel()
+        let job = jobs.first { $0.id == gid }
+        jobs.removeAll { $0.id == gid }
+        guard !gid.hasPrefix("debrid-"), process?.isRunning == true else { return }
         Task {
             _ = try? await call("aria2.forceRemove", [gid])
             _ = try? await call("aria2.removeDownloadResult", [gid])
+            // What a canceled one wrote goes with it, not left in Downloads
+            // as a file that opens broken (a torrent's folder stays).
+            if let job, job.kind != .torrent, !job.finished, let path = job.path {
+                try? await Task.sleep(for: .milliseconds(300))
+                try? FileManager.default.removeItem(at: path)
+                try? FileManager.default.removeItem(atPath: path.path + ".aria2")
+            }
         }
     }
 
     // MARK: - controls
 
-    func pause(_ job: Job) { Task { _ = try? await call("aria2.pause", [job.id]); tick() } }
-    func resume(_ job: Job) { Task { _ = try? await call("aria2.unpause", [job.id]); tick() } }
-
-    func remove(_ job: Job) {
-        guard !job.id.hasPrefix("debrid-"), process?.isRunning == true else {
-            jobs.removeAll { $0.id == job.id }
-            return
-        }
-        Task {
-            if !job.finished { _ = try? await call("aria2.forceRemove", [job.id]) }
-            _ = try? await call("aria2.removeDownloadResult", [job.id])
-            jobs.removeAll { $0.id == job.id }
-        }
+    func pause(gid: String) {
+        guard !gid.hasPrefix("debrid-") else { return }
+        Task { _ = try? await call("aria2.pause", [gid]); tick() }
     }
 
-    func reveal(_ job: Job) {
-        guard let path = job.path else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([path])
-    }
-
-    func clearFinished() {
-        for job in jobs where job.finished { remove(job) }
-    }
-
-    // MARK: - the column
-
-    func shown(in browser: Browser) -> Bool { browser.chatOpen && browser.panelExtension == Self.marker }
-
-    func toggle(in browser: Browser) {
-        if shown(in: browser) { close(in: browser) } else { open(in: browser) }
-    }
-
-    func open(in browser: Browser) {
-        browser.panelTabID = nil
-        browser.panelContextID = "smart"
-        browser.panelExtension = Self.marker
-        browser.moveChat(open: true)
-    }
-
-    func close(in browser: Browser) {
-        guard browser.panelExtension == Self.marker else { return }
-        browser.moveChat(open: false)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak browser] in
-            guard let browser, !browser.chatOpen, browser.panelExtension == Self.marker else { return }
-            browser.panelExtension = nil
-            browser.panelContextID = nil
-        }
+    func resume(gid: String) {
+        guard !gid.hasPrefix("debrid-") else { return }
+        Task { _ = try? await call("aria2.unpause", [gid]); tick() }
     }
 
     // MARK: - aria2
@@ -442,6 +509,11 @@ final class SmartDownloads: ObservableObject {
                     for next in followed where !jobs.contains(where: { $0.id == next }) {
                         jobs.insert(Job(id: next, name: old.name, kind: old.kind, status: .waiting), at: min(at, jobs.count))
                     }
+                    // Its row goes on as the first of them.
+                    if let entry = taken.removeValue(forKey: gid), let next = followed.first {
+                        entry.fetch.gid = next
+                        taken[next] = entry
+                    }
                 }
                 continue
             }
@@ -499,6 +571,29 @@ final class SmartFetch: PageDownload {
     weak var downloadEvents: (any PageDownloadEvents)?
     var gid: String?
     var onCancel: (() -> Void)?
+    var onPause: (() -> Void)?
+    var onResume: (() -> Void)?
+    /// Starts the whole of it again: a failed row's Try Again.
+    var onAgain: (() -> Void)?
+
+    // What aria2 last said of it, for the words and buttons of its row.
+    var kind: SmartDownloads.Kind = .link
+    var status: SmartDownloads.Status = .waiting
+    var speed: Int64 = 0
+    var connections = 0
+    var path: URL?
+    var note = ""
+    /// Where it comes from, said for people: a host, "Magnet link".
+    var origin = ""
+
+    /// Its file, or the folder it goes to while there is none yet.
+    func reveal() {
+        if let path, FileManager.default.fileExists(atPath: path.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([path])
+        } else {
+            NSWorkspace.shared.open(SmartDownloads.downloads)
+        }
+    }
 
     init(source: URL, page: (any PageHandle)?, pageURL: URL?, pageTitle: String?) {
         originalRequest = URLRequest(url: source)
@@ -513,7 +608,7 @@ final class SmartFetch: PageDownload {
         DispatchQueue.main.async { done(nil) }
     }
 
-    /// Try Again starts it in aria2 anew, as a new row would not: none.
+    /// Try Again starts it in aria2 anew, as a row of its own (Hoard.retry).
     func restartDownload(from resumeData: Data?, fallback: (any PageHandle)?,
                          done: @escaping @MainActor ((any PageDownload)?) -> Void) {
         DispatchQueue.main.async { done(nil) }
@@ -525,9 +620,12 @@ extension Browser {
     /// the button, and it is kept with the others, as the page's would be.
     func smartLanded(_ download: SmartFetch, file: URL, source: URL) {
         hoard.finish(download)
-        Browser.writeWhereFrom(file, [source, download.pageURL].compactMap { $0 })
-        SiteDownloads.quarantine(file, from: source, page: download.pageURL)
-        loot.add(Keep(name: file.lastPathComponent, from: source.host() ?? "", path: file.path, date: Date(),
+        // A torrent's folder is not marked as a page's file is.
+        if download.kind != .torrent {
+            Browser.writeWhereFrom(file, [source, download.pageURL].compactMap { $0 })
+            SiteDownloads.quarantine(file, from: source, page: download.pageURL)
+        }
+        loot.add(Keep(name: file.lastPathComponent, from: download.origin.isEmpty ? (source.host() ?? "") : download.origin, path: file.path, date: Date(),
                       page: download.pageURL, pageTitle: download.pageTitle.flatMap { $0.isEmpty ? nil : $0 }, source: source))
     }
 }

@@ -564,7 +564,7 @@ extension Browser {
                 let step = hoard.meter.steps[fetch.id]
                 let got = step.map { $0.total > 0 ? "\(ByteCountFormatter.string(fromByteCount: $0.got, countStyle: .file)) of \(ByteCountFormatter.string(fromByteCount: $0.total, countStyle: .file))" + (Browser.left(fetch, step: $0).map { " · \($0)" } ?? "") : ByteCountFormatter.string(fromByteCount: $0.got, countStyle: .file) }
                 out.append(PlaceItem(id: "fetch.\(fetch.id.hashValue)", section: "In Progress", title: fetch.name,
-                                     source: fetch.paused ? "Paused · from \(fetch.from)" : fetch.failed ? "Couldn’t download · from \(fetch.from)" : [got, "from \(fetch.from)"].compactMap { $0 }.joined(separator: " · "),
+                                     source: fetch.paused || fetch.failed ? "\(HoardList.detail(fetch, step: step ?? Hoard.Step())) · from \(fetch.from)" : [got, "from \(fetch.from)"].compactMap { $0 }.joined(separator: " · "),
                                      tile: .fetch(fetch), what: .fetch(fetch)))
             }
         }
@@ -1486,7 +1486,23 @@ extension Browser {
 
     /// The whole list's own: the folder, and clearing the list (files stay).
     private func downloadsKit() -> [FieldAction] {
-        [FieldAction(id: "folder", title: "Open Downloads Folder", symbol: "yab.folder.down", group: 4, image: ActionIcons.file(currentDownloadFolder)) {
+        var smart: [FieldAction] = []
+        if SmartDownloads.link(in: NSPasteboard.general.string(forType: .string)) {
+            smart.append(FieldAction(id: "paste-link", title: "Download Link from Clipboard", symbol: "arrow.down.circle", group: 4) {
+                SmartDownloads.shared.add(text: NSPasteboard.general.string(forType: .string) ?? "", show: self)
+            })
+        }
+        if SmartDownloads.available {
+            smart.append(FieldAction(id: "open-torrent", title: "Open Torrent File…", symbol: "doc.badge.plus", group: 4) {
+                self.close()
+                let panel = NSOpenPanel()
+                panel.allowedContentTypes = [UTType(filenameExtension: "torrent") ?? .data]
+                panel.allowsMultipleSelection = true
+                guard panel.runModal() == .OK else { return }
+                for url in panel.urls { SmartDownloads.shared.add(torrentFile: url, show: self) }
+            })
+        }
+        return smart + [FieldAction(id: "folder", title: "Open Downloads Folder", symbol: "yab.folder.down", group: 4, image: ActionIcons.file(currentDownloadFolder)) {
             self.close()
             NSWorkspace.shared.open(self.currentDownloadFolder)
         },
@@ -1504,8 +1520,14 @@ extension Browser {
 
     private func fetchActions(_ fetch: Hoard.Fetch) -> [FieldAction] {
         var out: [FieldAction] = []
+        if let smart = hoard.smart(fetch) {
+            if !fetch.failed, smart.status != .resolving {
+                out.append(FieldAction(id: "pause", title: "Pause Download", symbol: "pause.fill") { self.hoard.pauseSmart(fetch) })
+            }
+            out.append(FieldAction(id: "reveal", title: "Show in Finder", symbol: "magnifyingglass", group: 1) { smart.reveal() })
+        }
         if fetch.failed {
-            out.append(FieldAction(id: "retry", title: fetch.paused ? "Resume" : "Try Again", symbol: fetch.paused ? "arrow.clockwise" : "yab.reload") { self.hoard.retry(fetch) })
+            out.append(FieldAction(id: "retry", title: fetch.paused ? "Resume" : "Try Again", symbol: fetch.paused ? "play.fill" : "yab.reload") { self.hoard.retry(fetch) })
         }
         if let page = downloadPages[fetch.id]?.url {
             out.append(FieldAction(id: "page", title: "Return to Page", keys: Keymap.shared.text(.fieldPage), symbol: "yab.page.left", group: 1, image: ActionIcons.site(page)) {

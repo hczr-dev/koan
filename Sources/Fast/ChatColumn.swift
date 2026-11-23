@@ -340,7 +340,7 @@ extension Browser {
             ChromiumSidePanel.shared.closePanel(contextID: contextID)
             // A web panel's page is kept for next time; the column is the
             // chat's again.
-            if self.panelExtension == WebPanels.marker || self.panelExtension == SmartDownloads.marker {
+            if self.panelExtension == WebPanels.marker {
                 self.panelExtension = nil
                 self.panelContextID = nil
             }
@@ -552,10 +552,6 @@ private struct ChatColumnRoot: View {
                     .opacity(browser.panelExtension == page.id && browser.panelContextID == page.contextID ? 1 : 0)
                     .allowsHitTesting(browser.panelExtension == page.id && browser.panelContextID == page.contextID)
             }
-            // Smart Downloads' list (SmartDownloads).
-            SmartDownloadsColumn(browser: browser, width: look.width)
-                .opacity(browser.panelExtension == SmartDownloads.marker ? 1 : 0)
-                .allowsHitTesting(browser.panelExtension == SmartDownloads.marker)
             // The sites kept as panels (WebPanels): each one's page kept
             // here once opened, the one asked for in front.
             ForEach(webPanels.pages(in: browser)) { page in

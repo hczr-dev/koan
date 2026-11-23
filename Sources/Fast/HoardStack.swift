@@ -735,7 +735,7 @@ private struct FetchCard: View {
         let step = meter.steps[fetch.id] ?? Hoard.Step()
         Card(
             title: fetch.name,
-            detail: fetch.paused ? "Paused" : fetch.failed ? "Couldn't download" : left(step),
+            detail: fetch.paused || fetch.failed ? HoardList.detail(fetch, step: step) : left(step),
             alarm: fetch.failed && !fetch.paused,
             cancel: fetch.failed ? nil : { hoard.cancel(fetch) }
         ) {
@@ -747,10 +747,14 @@ private struct FetchCard: View {
         }
         .steadyMenu(actions: true) {
             if fetch.failed {
-                Button(fetch.paused ? "Resume" : "Try Again", mark: "yab.download") { hoard.retry(fetch) }
+                Button(fetch.paused ? "Resume" : "Try Again", mark: fetch.paused ? "play.fill" : "yab.download") { hoard.retry(fetch) }
                 Button("Remove", mark: "trash") { hoard.dismiss(fetch) }
             } else {
                 // Chrome's word for it, in its downloads' menu.
+                if let smart = hoard.smart(fetch) {
+                    if smart.status != .resolving { Button("Pause", mark: "pause.fill") { hoard.pauseSmart(fetch) } }
+                    Button("Show in Finder", mark: "magnifyingglass") { smart.reveal() }
+                }
                 Button("Cancel", mark: "xmark") { hoard.cancel(fetch) }
             }
         }
@@ -762,7 +766,7 @@ private struct FetchCard: View {
     /// are known.
     private func left(_ step: Hoard.Step) -> String {
         let said = HoardList.said(fetch, step: step)
-        guard step.total > 0 else { return said }
+        guard step.total > 0, SmartDownloads.shared.live(fetch.id) == nil else { return said }
         let giga = step.total >= 1_000_000_000
         let unit = giga ? 1_000_000_000.0 : 1_000_000.0
         func figure(_ bytes: Int64) -> String {

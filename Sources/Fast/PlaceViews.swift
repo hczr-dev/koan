@@ -491,7 +491,7 @@ struct PlacePreview: View {
                     .foregroundStyle(Palette.ink)
                     .lineLimit(2)
                 Group {
-                    if fetch.paused { Text("Paused") } else if fetch.failed { Text("Couldn’t download") } else { HoardFetchWords(meter: browser.hoard.meter, fetch: fetch) }
+                    if fetch.paused || fetch.failed { Text(HoardList.detail(fetch, step: browser.hoard.meter.steps[fetch.id] ?? Hoard.Step())) } else { HoardFetchWords(meter: browser.hoard.meter, fetch: fetch) }
                 }
                 .font(.system(size: 12).monospacedDigit())
                 .foregroundStyle(Palette.muted)

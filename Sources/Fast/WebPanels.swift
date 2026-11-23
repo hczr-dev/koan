@@ -185,12 +185,10 @@ final class WebPanels: ObservableObject {
 struct WebPanelStrip: View {
     let browser: Browser
     @ObservedObject private var panels = WebPanels.shared
-    @ObservedObject private var smart = SmartDownloads.shared
 
     var body: some View {
-        if !panels.list.isEmpty || !smart.jobs.isEmpty {
+        if !panels.list.isEmpty {
             HStack(spacing: 2) {
-                if !smart.jobs.isEmpty { SmartDownloadsButton(browser: browser) }
                 ForEach(panels.list) { panel in
                     WebPanelButton(browser: browser, panel: panel)
                 }

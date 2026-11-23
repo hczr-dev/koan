@@ -327,7 +327,7 @@ enum MenuCommands {
                 if let web = browser.active?.builtPage?.webKit { Highlights.shared.clear(in: web) }
             }
         add(.showSmartDownloads, "Smart Downloads", ["downloads", "torrent", "magnet", "debrid", "aria2", "download manager", "multi download"],
-            symbol: "arrow.down.circle") { SmartDownloads.shared.toggle(in: $0) }
+            symbol: "arrow.down.circle") { $0.openPlace(.downloads) }
         add(.foldBar, "Auto-Hide Address Bar", ["auto hide address bar", "compact mode", "fold address bar", "hide toolbar until pointed at"], symbol: "address.bar",
             when: { $0.prefs.addressBar && $0.prefs.sidebar && !$0.prefs.barFolds }) { $0.prefs.barFolds = true }
         add(.unfoldBar, "Always Show Address Bar", ["keep address bar", "unfold address bar", "stop hiding address bar"], symbol: "address.bar",
