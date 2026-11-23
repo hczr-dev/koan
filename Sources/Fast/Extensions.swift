@@ -828,6 +828,7 @@ final class Extensions: NSObject, ObservableObject {
                 },
         ]
         rowChanged()
+        for link in LinkWindow.all where link.browser === browser { follow(link) }
     }
 
     /// A window closed, and its tabs with it.
@@ -872,7 +873,11 @@ final class Extensions: NSObject, ObservableObject {
     func focusChanged() {
         if let popout = ExtensionPopout.owning(NSApp.keyWindow) {
             if popout.controller === controller { controller.didFocusWindow(popout.frame) }
-        } else if let key = NSApp.keyWindow, let known = windows.values.first(where: { $0.browser.flatMap { BrowserWindows.shared.window(for: $0) } === key }) {
+        } else if let link = LinkWindow.inFront {
+            if let own = windows[link.extensionKey] { controller.didFocusWindow(own) }
+        } else if let key = NSApp.keyWindow, let known = windows.values.first(where: {
+            !$0.isLink && $0.browser.flatMap { BrowserWindows.shared.window(for: $0) } === key
+        }) {
             controller.didFocusWindow(known)
         }
     }
@@ -999,7 +1004,8 @@ final class Extensions: NSObject, ObservableObject {
     /// The browser of the window in front, of those WebKit knows: where an
     /// extension's button is pressed, and where what it opens goes.
     var front: Browser? {
-        if let browser = BrowserWindows.shared.activeBrowser, windows[Self.key(of: browser)]?.browser === browser {
+        if let browser = LinkWindow.inFront?.browser ?? BrowserWindows.shared.activeBrowser,
+           windows[Self.key(of: browser)]?.browser === browser {
             return browser
         }
         return browser
@@ -1020,22 +1026,63 @@ final class Extensions: NSObject, ObservableObject {
         return browser
     }
 
-    /// The window in front, as WebKit knows it.
-    var window: ExtensionWindow? { front.flatMap { windows[Self.key(of: $0)] } }
+    /// The window in front, as WebKit knows it: a small window's own while it is.
+    var window: ExtensionWindow? {
+        if let link = LinkWindow.inFront, let own = windows[link.extensionKey] { return own }
+        return front.flatMap { windows[Self.key(of: $0)] }
+    }
 
     /// The tab in front in the window in front: what a button acts on.
-    var activeAdapter: ExtensionTab? { activeAdapter(in: front) }
+    var activeAdapter: ExtensionTab? {
+        // A small window in front that isn't ours: no tab, rather than the row's hidden one.
+        if let link = LinkWindow.inFront { return windows[link.extensionKey]?.activeAdapter }
+        return activeAdapter(in: front)
+    }
 
     func activeAdapter(in browser: Browser?) -> ExtensionTab? {
         guard let tab = browser?.active, seen(tab) else { return nil }
         return adapter(for: tab)
     }
 
+    /// A small window's page told as the one tab of a window of its own, as Chrome has a popup window.
+    func follow(_ link: LinkWindow) {
+        _ = Extensions.keyWatch
+        guard windows[link.extensionKey] == nil, let browser = link.browser, seen(link.tab),
+              windows[Self.key(of: browser)]?.browser === browser else { return }
+        let window = ExtensionWindow(owner: self, browser: browser, link: link)
+        windows[link.extensionKey] = window
+        windowOrder.append(link.extensionKey)
+        controller.didOpenWindow(window)
+        rowChanged()
+    }
+
+    func unfollow(_ link: LinkWindow) {
+        guard windows[link.extensionKey]?.isLink == true else { return }
+        unfollow(link.extensionKey)
+    }
+
+    /// Focus back on a browser window doesn't change `focusedID`, so every key change is told.
+    private static let keyWatch: NSObjectProtocol = NotificationCenter.default.addObserver(
+        forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+    ) { _ in MainActor.assumeIsolated { Extensions.all.forEach { $0.focusChanged() } } }
+
+    /// The page a small window claims: until it is kept or let go.
+    private func linkTabs(_ link: LinkWindow) -> [Tab] {
+        guard let browser = link.browser, browser.outside.contains(where: { $0 === link.tab }),
+              offered(link.tab, in: browser) else { return [] }
+        return [link.tab]
+    }
+
+    /// A small window's tabs as last told, so they agree with each tab's window (`home`).
+    fileprivate func toldTabs(_ link: LinkWindow) -> [Tab] {
+        placed[link.extensionKey]?.contains(link.tab.id) == true ? [link.tab] : []
+    }
+
     /// The window a tab is in: where WebKit was told it is, else the one
     /// whose row has it (a tab just opened for an extension), else the first.
     func window(of tab: Tab) -> ExtensionWindow? {
         if let key = home[tab.id], let window = windows[key] { return window }
-        if let window = windows.values.first(where: { $0.browser?.tabs.contains { $0 === tab } == true }) { return window }
+        if let window = windows.values.first(where: { !$0.isLink && $0.browser?.tabs.contains { $0 === tab } == true }) { return window }
         return browser.flatMap { windows[Self.key(of: $0)] }
     }
 
@@ -1093,7 +1140,7 @@ final class Extensions: NSObject, ObservableObject {
     /// (`tabs(for:)`), and leaves out every tab of a window whose tab in
     /// front it can't find in that list: none in front (the field asking
     /// over no page), or a private tab or another sign-in's in front. Tabs
-    /// no list has (a parked row, a peek, a small window's page) it never
+    /// no list has (a parked row, a peek) it never
     /// opens there at all. A tab it hasn't opened for a context is one that
     /// context has no tab for: the extension's content scripts are put in
     /// its page, and every runtime.sendMessage and runtime.connect from
@@ -1121,16 +1168,19 @@ final class Extensions: NSObject, ObservableObject {
 
     /// Every window's tabs, told: its row, its spaces parked (a switch is
     /// no closing and reopening of every tab), and its pages not in the row
-    /// yet, a small window's, a peek's. Each runs the extensions' scripts,
-    /// so each is a tab to WebKit, one outside the row at no place in it,
-    /// as a parked one is.
+    /// yet, a peek's. Each runs the extensions' scripts, so each is a tab to
+    /// WebKit, one outside the row at no place in it, as a parked one is. A
+    /// small window's page is the one tab of its own window (`follow(_:)`).
     private func place() {
         // A row and a parked space can carry the same tab while changing
         // spaces, and two rows a tab moving between windows. WebKit knows a
         // tab once, in one window, and its positions must be unique too.
         var claimed = Set<Tab.ID>()
         var now: [UUID: [Tab]] = [:]
-        for key in windowOrder {
+        for key in windowOrder where windows[key]?.isLink == true {
+            now[key] = windows[key]?.link.map { linkTabs($0).filter { claimed.insert($0.id).inserted } } ?? []
+        }
+        for key in windowOrder where windows[key]?.isLink == false {
             guard let browser = windows[key]?.browser else { continue }
             // In the order the window lists them (`visibleTabs`), then
             // what it holds at no place: shared pins put aside, a row of a
@@ -3457,7 +3507,7 @@ final class Extensions: NSObject, ObservableObject {
     /// tab or for all of them, else its manifest's.
     private func popupURL(for context: WKWebExtensionContext) -> URL? {
         let set = popupPaths[context.uniqueIdentifier] ?? [:]
-        let path = browser?.active.flatMap { set[$0.id.uuidString] } ?? set["*"]
+        let path = (window?.link?.tab ?? browser?.active).flatMap { set[$0.id.uuidString] } ?? set["*"]
         guard let path else { return Extensions.popupURL(for: context) }
         guard !path.isEmpty else { return nil }
         return URL(string: path, relativeTo: context.baseURL)?.absoluteURL
@@ -3954,7 +4004,11 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
 
     func window(for context: WKWebExtensionContext) -> (any WKWebExtensionWindow)? { tab.flatMap(owner.window(of:)) }
 
+    /// The small window it is the one tab of, if it is.
+    private var link: LinkWindow? { tab.flatMap { owner.window(of: $0)?.link } }
+
     func indexInWindow(for context: WKWebExtensionContext) -> Int {
+        if link != nil { return 0 }
         guard let tab, let browser else { return NSNotFound }
         return owner.listing(browser).places[tab.id] ?? NSNotFound
     }
@@ -3963,7 +4017,7 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
     func title(for context: WKWebExtensionContext) -> String? { tab?.title }
     func url(for context: WKWebExtensionContext) -> URL? { tab?.address.map(Extensions.popped) }
     func isLoadingComplete(for context: WKWebExtensionContext) -> Bool { !(tab?.loading ?? false) }
-    func isSelected(for context: WKWebExtensionContext) -> Bool { tab?.id == browser?.activeID }
+    func isSelected(for context: WKWebExtensionContext) -> Bool { link != nil || tab?.id == browser?.activeID }
     func isPinned(for context: WKWebExtensionContext) -> Bool { tab?.pin != nil }
     func isPlayingAudio(for context: WKWebExtensionContext) -> Bool { tab?.noisy ?? false }
     func isMuted(for context: WKWebExtensionContext) -> Bool { tab?.muted ?? false }
@@ -4014,6 +4068,7 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
     func goForward(for context: WKWebExtensionContext) async throws { tab?.forward() }
 
     func activate(for context: WKWebExtensionContext) async throws {
+        if let link { return link.window.makeKeyAndOrderFront(nil) }
         guard let tab, let browser else { return }
         // A tab of a space not on screen: that space first, as a click on
         // it in the tray would (Rabby bringing its welcome tab forward).
@@ -4027,6 +4082,7 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
     /// switcher, without going to it; a pin or a kept tab is put down
     /// rather than taken out of its row, as ⌘W puts it down.
     func close(for context: WKWebExtensionContext) async throws {
+        if let link { return link.close() }
         guard let tab, let browser else { return }
         if browser.tabs.contains(where: { $0.id == tab.id }) { return browser.close(tab) }
         guard browser.parked.values.contains(where: { $0.tabs.contains { $0.id == tab.id } }) else { return }
@@ -4050,13 +4106,26 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
 final class ExtensionWindow: NSObject, WKWebExtensionWindow {
     unowned let owner: Extensions
     weak var browser: Browser?
+    /// The small window this is, rather than a browser window.
+    private(set) weak var link: LinkWindow?
+    /// Kept apart from `link`, which is weak: this is never taken for a browser window.
+    let isLink: Bool
 
-    init(owner: Extensions, browser: Browser) {
+    init(owner: Extensions, browser: Browser, link: LinkWindow? = nil) {
         self.owner = owner
         self.browser = browser
+        self.link = link
+        isLink = link != nil
+    }
+
+    /// Its tab in front: a small window's page, or the row's active tab.
+    var activeAdapter: ExtensionTab? {
+        guard isLink else { return owner.activeAdapter(in: browser) }
+        return link.flatMap { owner.toldTabs($0).first }.flatMap { owner.seen($0) ? owner.adapter(for: $0) : nil }
     }
 
     private var nsWindow: NSWindow? {
+        if let link { return link.window }
         if let browser, let window = BrowserWindows.shared.window(for: browser) { return window }
         guard browser?.windowID == nil else { return nil }
         return NSApp.windows.first { $0.isVisible && $0.contentView != nil && $0.frameAutosaveName == "yab" }
@@ -4064,13 +4133,18 @@ final class ExtensionWindow: NSObject, WKWebExtensionWindow {
     }
 
     func tabs(for context: WKWebExtensionContext) -> [any WKWebExtensionTab] {
+        if isLink { return link.map { owner.toldTabs($0).filter(owner.seen).map(owner.adapter(for:)) } ?? [] }
         guard let browser else { return [] }
         return owner.listing(browser).adapters
     }
 
-    func activeTab(for context: WKWebExtensionContext) -> (any WKWebExtensionTab)? { owner.activeAdapter(in: browser) }
-    func windowType(for context: WKWebExtensionContext) -> WKWebExtension.WindowType { .normal }
-    func isPrivate(for context: WKWebExtensionContext) -> Bool { browser?.windowPurpose == .privateOnly }
+    func activeTab(for context: WKWebExtensionContext) -> (any WKWebExtensionTab)? { activeAdapter }
+    /// A popup, as Chrome's: tab managers sweeping normal windows leave it be.
+    func windowType(for context: WKWebExtensionContext) -> WKWebExtension.WindowType { isLink ? .popup : .normal }
+    func isPrivate(for context: WKWebExtensionContext) -> Bool {
+        if let link { return link.tab.shy }
+        return browser?.windowPurpose == .privateOnly
+    }
 
     func windowState(for context: WKWebExtensionContext) -> WKWebExtension.WindowState {
         guard let window = nsWindow else { return .normal }
@@ -4091,10 +4165,9 @@ final class ExtensionWindow: NSObject, WKWebExtensionWindow {
 // MARK: - where panels and popups hang
 
 /// Where Site Controls is (SiteControls.swift), or an extension pinned in
-/// the plate. There can be more than one of it, the plate's and a band's,
-/// and whichever was drawn last used to take the anchor, so one could lose
-/// it on its way out and the panel opened from the middle of the window.
-/// Now the anchor is the one on screen, the last to get there; one leaving
+/// the plate. There can be more than one of it: the plate's, a band's, a
+/// small window's. The anchor is the one on screen in the window in front,
+/// else the last to get there, never a small window behind; one leaving
 /// hands it to the other.
 @available(macOS 15.4, *)
 final class AnchorView: NSView {
@@ -4109,7 +4182,12 @@ final class AnchorView: NSView {
         self.edge = edge
         super.init(frame: .zero)
         AnchorView.live.add(self)
+        _ = AnchorView.keyWatch
     }
+
+    private static let keyWatch: NSObjectProtocol = NotificationCenter.default.addObserver(
+        forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+    ) { _ in MainActor.assumeIsolated { AnchorView.resettle() } }
 
     required init?(coder: NSCoder) { fatalError("not from a nib") }
 
@@ -4141,10 +4219,29 @@ final class AnchorView: NSView {
         }
     }
 
+    /// Every id again, after the window in front changed.
+    @MainActor
+    static func resettle() {
+        Set(live.allObjects.map(\.id)).forEach(settle)
+    }
+
+    /// The key window and the windows it hangs from.
+    @MainActor
+    private static var frontChain: [NSWindow] {
+        Array(sequence(first: NSApp.keyWindow, next: { $0?.parent }).prefix { $0 != nil }.compactMap { $0 })
+    }
+
     @MainActor
     static func settle(_ id: String) {
         let here = live.allObjects.filter { $0.id == id && $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }
-        let pick = here.max { $0.arrived < $1.arrived }
+        // The window in front's own anchors first; a small window's only while it is in front.
+        let chain = frontChain
+        let inFront = here.filter { view in chain.contains { $0 === view.window } }
+        let frontHasDoor = live.allObjects.contains { view in
+            view.id == Extensions.menuAnchor && !view.isHiddenOrHasHiddenAncestor && chain.contains { $0 === view.window }
+        }
+        let pool = !inFront.isEmpty ? inFront : frontHasDoor ? [] : here.filter { LinkWindow.owning($0.window) == nil }
+        let pick = pool.max { $0.arrived < $1.arrived }
         let extensions = Extensions.shared
         extensions.anchors[id] = pick.map(WeakView.init)
         if id == Extensions.menuAnchor, let pick { extensions.menuEdge = pick.edge }
