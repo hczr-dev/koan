@@ -368,6 +368,9 @@ final class Tab: ObservableObject, Identifiable, Relaying {
     /// engine and takes this one when it next builds a page (waking).
     @ObservationIgnored var enginePendingDefault: PageEngineKind?
     @ObservationIgnored var chromiumDRMExtensions: ChromiumDRMExtensions?
+    /// The extensions' bridge getting ready for a WebKit page, which waits a
+    /// second for it, no more (Tab's prepareChromiumCookies).
+    @ObservationIgnored var chromiumDRMExtensionsPreparing: Task<Void, Error>?
     private(set) var engineKind: PageEngineKind {
         willSet { relay.send(\.engineKind, newValue) }
     }
@@ -2252,13 +2255,28 @@ final class Tab: ObservableObject, Identifiable, Relaying {
                 // like the site refusing it.
                 do { try await ChromiumDRMCookies.of(self).prepare(for: url, in: .webKit) }
                 catch { NSLog("Cookie bridge: not carried before a WebKit page: %@", String(describing: type(of: error))) }
+                LoadTrace.mark(web, url, "cookie bridge done")
                 guard !self.gone else { throw CancellationError() }
                 if !self.shy {
-                    do {
-                        let extensions = try self.chromiumDRMExtensions ?? ChromiumDRMExtensions(tab: self, web: web)
-                        self.chromiumDRMExtensions = extensions
-                        try await extensions.prepare(url)
-                    } catch { NSLog("Chromium extensions: not ready for a WebKit page: %@", String(describing: type(of: error))) }
+                    // With Chromium not running, its extensions take up to 10 s
+                    // (the helper starts, a hidden extensions tab opens). The
+                    // page waits one second for them and no more: the rest goes
+                    // on behind it, and the next page has them.
+                    let work: Task<Void, Error>
+                    if let running = self.chromiumDRMExtensionsPreparing { work = running } else {
+                        work = Task { @MainActor [weak self, weak web] in
+                            defer { self?.chromiumDRMExtensionsPreparing = nil }
+                            guard let self, let web else { return }
+                            do {
+                                let extensions = try self.chromiumDRMExtensions ?? ChromiumDRMExtensions(tab: self, web: web)
+                                self.chromiumDRMExtensions = extensions
+                                try await extensions.prepare(url)
+                                LoadTrace.mark(web, url, "extensions ready")
+                            } catch { NSLog("Chromium extensions: not ready for a WebKit page: %@", String(describing: type(of: error))) }
+                        }
+                        self.chromiumDRMExtensionsPreparing = work
+                    }
+                    await ChromiumDRMCookies.wait(for: work, seconds: 1)
                     guard !self.gone else { throw CancellationError() }
                 }
             }
@@ -4544,6 +4562,7 @@ final class Tab: ObservableObject, Identifiable, Relaying {
         }
         chromiumDRMExtensions?.detach()
         chromiumDRMExtensions = nil
+        chromiumDRMExtensionsPreparing = nil
         cancelVideoOpening()
         // Asleep, put down or closed: the next look builds it afresh, under
         // the picture it slept with, if any (`cover`).

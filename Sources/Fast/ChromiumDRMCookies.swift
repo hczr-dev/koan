@@ -514,7 +514,7 @@ final class ChromiumDRMCookies: NSObject, WKHTTPCookieStoreObserver {
         func open() { continuation?.resume(); continuation = nil }
     }
 
-    private static func wait(for task: Task<Void, Error>, seconds: TimeInterval) async {
+    static func wait(for task: Task<Void, Error>, seconds: TimeInterval) async {
         let latch = Latch()
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             latch.continuation = continuation

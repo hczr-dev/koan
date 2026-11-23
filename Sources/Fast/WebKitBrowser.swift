@@ -119,7 +119,10 @@ final class WebKitPageEvents: NSObject, WKNavigationDelegate, WKUIDelegate {
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         // A new destination cancels recovery before async policy can hold it.
         if action.targetFrame?.isMainFrame == true { cancelLoadRetry() }
+        let traced = action.targetFrame?.isMainFrame == true
+        if traced { LoadTrace.begin(webView, action.request.url) }
         let decide: (WKNavigationActionPolicy) -> Void = { [weak self] policy in
+            if traced { LoadTrace.mark(webView, action.request.url, policy == .allow ? "allowed" : "not allowed") }
             if action.targetFrame?.isMainFrame == true {
                 if policy == .allow { self?.acceptNavigation(action.request) }
                 else { self?.cancelLoadRetry() }
@@ -129,10 +132,12 @@ final class WebKitPageEvents: NSObject, WKNavigationDelegate, WKUIDelegate {
         LastingSignIns.whenReady(webView.configuration.websiteDataStore) { [weak self, weak webView] in
             guard let self, let webView else { decide(.cancel); return }
             guard let page = webView as? PageView, let listener = self.listener else { decide(.allow); return }
+            if traced { LoadTrace.mark(webView, action.request.url, "sign-ins ready") }
             var answered = false
             listener.page(page, decide: PageAction(action)) { policy in
                 guard !answered else { return }
                 answered = true
+                if traced { LoadTrace.mark(page, action.request.url, "app policy") }
                 if policy == .allow, action.targetFrame?.isMainFrame == true, let skipped = self.skip(action.request, in: page) {
                     // A click tracker with its destination inside: never
                     // asked, the tab goes there (Shield.skip). Before the
@@ -149,7 +154,9 @@ final class WebKitPageEvents: NSObject, WKNavigationDelegate, WKUIDelegate {
                                 decide(.cancel)
                                 return
                             }
+                            if traced, let page { LoadTrace.mark(page, url, "engine routed") }
                             try await prepare(url)
+                            if traced, let page { LoadTrace.mark(page, url, "cookies and extensions prepared") }
                             guard self?.listener != nil, page?.events != nil else { decide(.cancel); return }
                             decide(.allow)
                         } catch { decide(.cancel) }
@@ -196,6 +203,7 @@ final class WebKitPageEvents: NSObject, WKNavigationDelegate, WKUIDelegate {
         ClientCertificates.cancel(in: webView)
         guard let page = webView as? PageView else { return }
         currentNavigation = navigation?.pageNavigation
+        LoadTrace.mark(page, webView.url, "started")
         listener?.page(page, navigation: .started(currentNavigation))
     }
 
@@ -209,6 +217,7 @@ final class WebKitPageEvents: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard let page = webView as? PageView else { return }
         currentNavigation = navigation?.pageNavigation
         cancelLoadRetry()
+        LoadTrace.mark(page, webView.url, "committed")
         listener?.page(page, navigation: .committed(navigation?.pageNavigation))
     }
 
@@ -216,6 +225,7 @@ final class WebKitPageEvents: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard let page = webView as? PageView else { return }
         guard navigation?.pageNavigation == currentNavigation else { return }
         cancelLoadRetry()
+        LoadTrace.mark(page, webView.url, "finished")
         listener?.page(page, navigation: .finished(navigation?.pageNavigation))
     }
 

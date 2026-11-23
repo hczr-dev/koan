@@ -8618,6 +8618,7 @@ final class Browser: NSObject, ObservableObject, Relaying {
     /// even when they look like a place: node.js is a thing to read about as
     /// often as a site.
     func submit(_ way: Way = .here, searching: Bool = false, copyingTabs: Bool = false) {
+        LoadTrace.returned()
         let previousInput = fieldNavigationInput
         fieldNavigationInput = searching || picked != nil || query.pointed != nil ? nil : completed
         defer { fieldNavigationInput = previousInput }
