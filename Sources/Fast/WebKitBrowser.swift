@@ -121,8 +121,13 @@ final class WebKitPageEvents: NSObject, WKNavigationDelegate, WKUIDelegate {
         if action.targetFrame?.isMainFrame == true { cancelLoadRetry() }
         let traced = action.targetFrame?.isMainFrame == true
         if traced { LoadTrace.begin(webView, action.request.url) }
-        let decide: (WKNavigationActionPolicy) -> Void = { [weak self] policy in
-            if traced { LoadTrace.mark(webView, action.request.url, policy == .allow ? "allowed" : "not allowed") }
+        let decide: (WKNavigationActionPolicy) -> Void = { [weak self, weak webView] policy in
+            if traced, let webView { LoadTrace.mark(webView, action.request.url, policy == .allow ? "allowed" : "not allowed") }
+            if policy == .allow, #available(macOS 15.4, *), let webView,
+               !ChromiumDRMResources.recordNavigation(action, in: webView) {
+                decisionHandler(.cancel)
+                return
+            }
             if action.targetFrame?.isMainFrame == true {
                 if policy == .allow { self?.acceptNavigation(action.request) }
                 else { self?.cancelLoadRetry() }
